@@ -7,6 +7,6 @@ router
   .get(cartController.getCart)
   .post(cartController.addCart)
   .put(cartController.updateCart)
-  .put(cartController.deleteItemFromCart);
+  .delete(cartController.deleteItemFromCart);
 
 module.exports = router;

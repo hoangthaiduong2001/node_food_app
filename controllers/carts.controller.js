@@ -54,8 +54,8 @@ const updateCart = async (req, res) => {
 
 const deleteItemFromCart = async (req, res) => {
   const cartId = req.session.cart;
-  const productId = req.query.productId;
-  if (!cartId || !productId) {
+  const productsId = req.query.productsId;
+  if (!cartId || !productsId) {
     return res
       .status(400)
       .json({ message: "Cart ID or Product ID is missing" });
@@ -63,11 +63,7 @@ const deleteItemFromCart = async (req, res) => {
   try {
     const updatedCart = await CartModel.findOneAndUpdate(
       { _id: cartId },
-      {
-        $pull: {
-          products: { product: productId },
-        },
-      },
+      { $pull: { products: { _id: productsId } } },
       { new: true }
     ).exec();
 

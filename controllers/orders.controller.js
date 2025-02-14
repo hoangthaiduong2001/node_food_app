@@ -23,7 +23,7 @@ const getOrder = async (req, res) => {
   }
 };
 
-const getorders = async (req, res) => {
+const getOrders = async (req, res) => {
   const search = req.query.search;
   const start = req.query.start ?? 1;
   const end = req.query.count ?? 10;
@@ -65,4 +65,28 @@ const updateOrder = async (req, res) => {
   }
 };
 
-module.exports = { addNewOrder, getOrder, getorders, deleteOrder, updateOrder };
+const paymentOrder = async (req, res) => {
+  const id = req.params.id;
+  const data = req.body;
+  try {
+    await OrderModel.findOneAndUpdate(
+      { _id: id },
+      {
+        $set: data,
+      }
+    ).exec();
+    res.status(200).json({ message: "Payment successfully" });
+  } catch (error) {
+    console.log("error", error);
+    res.status(400).json(error);
+  }
+};
+
+module.exports = {
+  addNewOrder,
+  getOrder,
+  getOrders,
+  deleteOrder,
+  updateOrder,
+  paymentOrder,
+};

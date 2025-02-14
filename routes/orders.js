@@ -4,7 +4,7 @@ const router = require("express").Router();
 
 router
   .route("/")
-  .get(orderController.getorders)
+  .get(orderController.getOrders)
   .post(orderController.addNewOrder);
 
 router
@@ -12,5 +12,7 @@ router
   .get(orderController.getOrder)
   .put(orderController.updateOrder)
   .delete(orderController.deleteOrder);
+
+router.route("/payment/:id").put(orderController.paymentOrder);
 
 module.exports = router;
