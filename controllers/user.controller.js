@@ -43,7 +43,7 @@ const login = async (req, res, next) => {
     req.session.user = user._id;
     req.session.save();
     user.password = undefined;
-    res.status(200).json({ message: "you have login successfully", user });
+    res.status(200).json({ message: "You have login successfully", user });
   } catch (error) {
     res.status(404).json({ message: error });
   }
@@ -68,7 +68,7 @@ const isLogin = async (req, res, next) => {
     };
     res.status(200).json(newUser);
   } else {
-    res.status(404).json({ message: "use is not login" });
+    res.status(404).json({ message: "You are not login" });
   }
 };
 const forgetPassword = async (req, res, next) => {

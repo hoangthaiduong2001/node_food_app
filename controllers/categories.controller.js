@@ -65,7 +65,7 @@ const deleteCategory = async (req, res) => {
     await CategoryModel.findByIdAndDelete(id).exec();
     res.status(200).json({ message: "Category has been deleted" });
   } catch (error) {
-    res.status(500).json(err);
+    res.status(500).json(error);
   }
 };
 
