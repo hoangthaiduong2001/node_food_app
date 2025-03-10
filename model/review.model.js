@@ -11,7 +11,6 @@ const reviewSchema = new Schema(
         },
         reviewer: {
           type: mongoose.Schema.Types.ObjectId,
-          // type: String,
           ref: "UserModel",
         },
         rating: { type: Number, min: 1, max: 5 },
