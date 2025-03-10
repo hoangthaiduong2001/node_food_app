@@ -3,7 +3,6 @@ const path = require("path");
 const cors = require("cors");
 const session = require("express-session");
 const corsOptions = require("./config/corsOptions");
-const multer = require("multer");
 const errorHandler = require("./middleware/errorHandler");
 const { connectDb, sessionCollection } = require("./config/db");
 const auth = require("./middleware/authentication");
@@ -40,7 +39,6 @@ app.use(
   })
 );
 
-// ======================= Routes
 app.use("/products", require("./routes/products"));
 app.use("/orders", auth, require("./routes/orders"));
 app.use("/carts", require("./routes/carts"));
