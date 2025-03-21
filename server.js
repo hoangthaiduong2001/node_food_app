@@ -13,7 +13,7 @@ const app = express();
 app.set("trust proxy", 1);
 connectDb();
 
-app.use(cors(corsOptions));
+app.use(cors({ origin: "http://localhost:3001", credentials: true }));
 app.use(bodyParser.json());
 app.use(
   bodyParser.urlencoded({
