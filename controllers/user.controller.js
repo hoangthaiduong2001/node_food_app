@@ -147,6 +147,96 @@ const updatePasswordWithToken = async (req, res, next) => {
     return res.status(400).json({ message: error });
   }
 };
+
+const getAllUser = async (req, res) => {
+  const { start, end, search } = req.query;
+  let filter = {};
+  if (search) {
+    filter = {
+      $or: [
+        {
+          name: new RegExp(search),
+        },
+      ],
+    };
+  }
+  try {
+    if (start && end) {
+      const user = await UserModel.find(filter)
+        .select("-password")
+        .where("role")
+        .ne("admin")
+        .skip(start - 1 ?? 0)
+        .limit(end ?? 10)
+        .exec();
+      res.status(200).json({ data: user });
+    } else {
+      const users = await UserModel.find(filter)
+        .select("-password")
+        .where("role")
+        .ne("admin")
+        .exec();
+      res.status(200).json({ data: users });
+    }
+  } catch (err) {
+    res.status(500).json(err);
+  }
+};
+
+const getUserById = async (req, res) => {
+  const id = req.params.id;
+  try {
+    const user = await UserModel.findById(id).select("-password").exec();
+    res.status(200).json({ data: user });
+  } catch (error) {
+    res.status(400).json(error);
+  }
+};
+
+const createUser = async (req, res, next) => {
+  const { password } = req.body;
+  const hasedPassword = await bcrypt.hash(password, 12);
+  try {
+    const user = new UserModel({
+      ...req.body,
+      password: hasedPassword,
+    });
+    await user.save();
+    const { password, ...userWithoutPassword } = user.toObject();
+    res
+      .status(201)
+      .json({ message: "Create user successfully", data: userWithoutPassword });
+  } catch (error) {
+    res.status(400).json({ message: error.message });
+  }
+};
+
+const updateUser = async (req, res) => {
+  const id = req.params.id;
+  try {
+    const user = await UserModel.findOneAndUpdate(
+      { _id: id },
+      { $set: req.body },
+      { new: true }
+    )
+      .select("-password")
+      .exec();
+    res.status(200).json({ message: "Update user successfully", data: user });
+  } catch (error) {
+    res.status(400).json(error);
+  }
+};
+
+const deleteUser = async (req, res) => {
+  const id = req.params.id;
+  try {
+    await UserModel.deleteOne({ _id: id });
+    res.status(200).json({ message: "Delete user successfully" });
+  } catch (error) {
+    res.status(400).json(error);
+  }
+};
+
 module.exports = {
   signup,
   login,
@@ -155,4 +245,9 @@ module.exports = {
   forgetPassword,
   updatePassword,
   updatePasswordWithToken,
+  getAllUser,
+  createUser,
+  getUserById,
+  updateUser,
+  deleteUser,
 };

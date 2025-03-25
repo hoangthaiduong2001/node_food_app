@@ -1,6 +1,7 @@
 const UserModel = require("../model/user.model");
 
 const isAdminAuth = async (req, res, next) => {
+  console.log("req.session", req.session);
   if (req.session.islogin) {
     const user = await UserModel.findById(req.session?.user).exec();
     if (user && user.role === "admin") {

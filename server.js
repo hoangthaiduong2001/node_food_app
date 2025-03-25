@@ -46,6 +46,7 @@ app.use("/categories", require("./routes/categories"));
 app.use("/reviews", require("./routes/reviews"));
 app.use("/password", require("./routes/users"));
 app.use("/session", require("./routes/users"));
+app.use("/user", require("./routes/users"));
 
 app.use(errorHandler);
 app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
