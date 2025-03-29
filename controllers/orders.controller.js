@@ -6,7 +6,7 @@ const addNewOrder = async (req, res) => {
     const newOrder = await Order.save();
     res
       .status(200)
-      .json({ data: newOrder, massage: "added a new Order successfully!" });
+      .json({ data: newOrder, message: "added a new Order successfully!" });
   } catch (error) {
     res.status(400).json(error);
   }

@@ -186,7 +186,7 @@ const getAllUser = async (req, res) => {
 const getUserById = async (req, res) => {
   const id = req.params.id;
   try {
-    const user = await UserModel.findById(id).select("-password").exec();
+    const user = await UserModel.findById(id).exec();
     res.status(200).json({ data: user });
   } catch (error) {
     res.status(400).json(error);

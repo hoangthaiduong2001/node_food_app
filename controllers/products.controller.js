@@ -2,7 +2,7 @@ const ProductModel = require("../model/product.model");
 const fs = require("fs");
 
 const getAllProducts = async (req, res) => {
-  const { start, count, search, category } = req.query;
+  const { start, end, search, category } = req.query;
   let filter = {};
   if (search) {
     filter = {
@@ -41,12 +41,19 @@ const getAllProducts = async (req, res) => {
       { $match: filter },
       {
         $facet: {
-          products: [{ $skip: +start - 1 || 0 }, { $limit: +count || 10 }],
+          data:
+            start && end
+              ? [{ $skip: +start - 1 || 0 }, { $limit: +end || 10 }]
+              : [],
           count: [{ $count: "total" }],
         },
       },
     ]);
-    res.status(200).json(Products);
+    const response = {
+      data: Products[0]?.data || [],
+      total: Products[0]?.count[0]?.total || 0,
+    };
+    res.status(200).json(response);
   } catch (err) {
     res.status(400).json(err);
   }
@@ -58,7 +65,9 @@ const getProductById = async (req, res) => {
   try {
     const product = await ProductModel.findById(id).populate("category");
     // product = { ...product, averageRating: product.averageRating };
-    res.status(200).json(product);
+    res
+      .status(200)
+      .json({ message: "Get information product successfully", data: product });
   } catch (error) {
     console.log("error", error);
     res.status(404).json(error);
@@ -77,7 +86,7 @@ const addNewProduct = async (req, res) => {
     //product.averageRating;
     res
       .status(200)
-      .json({ massage: "Add a new product successfully", product: product });
+      .json({ message: "Add a new product successfully", data: product });
   } catch (err) {
     console.log("err", err);
     res.status(500).json(err);
@@ -92,14 +101,16 @@ const updateProduct = async (req, res) => {
     data = { ...data, img: `${filePath}/images/${req.file.filename}` };
   }
   try {
-    await ProductModel.findByIdAndUpdate(
+    const product = await ProductModel.findByIdAndUpdate(
       id,
       {
         $set: data,
       },
       { new: true }
     ).exec();
-    res.status(200).json({ massage: "Update a product successfully" });
+    res
+      .status(200)
+      .json({ message: "Update a product successfully", data: product });
   } catch (error) {
     res.status(500).json(error);
   }
@@ -114,10 +125,17 @@ const deleteProduct = async (req, res) => {
     }
     if (product?.img) {
       try {
-        await fs.unlink(`.${product.img.substr(21)}`);
-        res
-          .status(200)
-          .json({ message: "Product and associated file have been deleted" });
+        const filePath = `.${product.img.replace(/^.*\/images\//, "/images/")}`;
+        fs.unlink(filePath, (err) => {
+          if (err) {
+            return res
+              .status(500)
+              .json({ message: "Could not delete the file. " + err });
+          }
+          res
+            .status(200)
+            .json({ message: "Product and associated file have been deleted" });
+        });
       } catch (err) {
         res.status(500).json({ message: "Could not delete the file. " + err });
       }
