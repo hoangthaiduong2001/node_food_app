@@ -9,4 +9,6 @@ router
   .put(cartController.updateCart)
   .delete(cartController.deleteItemFromCart);
 
+router.route("/:userId").get(cartController.getCartByUserId);
+
 module.exports = router;

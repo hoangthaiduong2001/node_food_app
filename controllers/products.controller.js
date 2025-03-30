@@ -61,7 +61,6 @@ const getAllProducts = async (req, res) => {
 
 const getProductById = async (req, res) => {
   const { id } = req.params;
-
   try {
     const product = await ProductModel.findById(id).populate("category");
     // product = { ...product, averageRating: product.averageRating };
