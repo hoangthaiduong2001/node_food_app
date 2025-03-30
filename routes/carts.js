@@ -7,8 +7,11 @@ router
   .get(cartController.getCart)
   .post(cartController.addCart)
   .put(cartController.updateCart)
-  .delete(cartController.deleteItemFromCart);
+  .delete(cartController.deleteForUser);
 
-router.route("/:userId").get(cartController.getCartByUserId);
+router
+  .route("/:userId")
+  .get(cartController.getCartByUserId)
+  .delete(cartController.deleteForAdmin);
 
 module.exports = router;

@@ -28,7 +28,6 @@ const getCart = async (req, res) => {
       .status(200)
       .json({ message: "Get all cart successfully", data: formattedCarts });
   } catch (error) {
-    console.error("Error fetching cart:", error);
     res.status(500).json({ error: "Internal Server Error" });
   }
 };
@@ -42,14 +41,13 @@ const getCartByUserId = async (req, res) => {
     }
 
     const cart = await CartModel.findOne({ user: userId })
-      .populate("products.product", "title price discount") // Populate product details
-      .populate("user", "username"); // Populate user details
+      .populate("products.product", "title price discount")
+      .populate("user", "username");
 
     if (!cart) {
       return res.status(404).json({ message: "Cart not found for this user" });
     }
 
-    // Format response
     const formattedCart = {
       _id: cart._id,
       username: cart.user?.username || "Guest",
@@ -65,15 +63,14 @@ const getCartByUserId = async (req, res) => {
       .status(200)
       .json({ message: "Cart retrieved successfully", data: formattedCart });
   } catch (error) {
-    console.error("Error fetching cart by user ID:", error);
     res.status(500).json({ message: "Internal Server Error", error });
   }
 };
 
 const addCart = async (req, res) => {
   try {
-    const { user, products } = req.body;
-    let cart = await CartModel.findOne({ user });
+    const { userId, products } = req.body;
+    let cart = await CartModel.findOne({ user: userId });
 
     if (cart) {
       products.forEach((newItem) => {
@@ -101,61 +98,54 @@ const addCart = async (req, res) => {
         .json({ message: "New cart created successfully", cart: newCart });
     }
   } catch (error) {
-    console.error("Error creating/updating cart:", error);
     res.status(500).json({ error: "Internal Server Error" });
   }
 };
 
 const updateCart = async (req, res) => {
   try {
-    const idCart = req.session.cart;
-    const { product, quantity } = req.body;
+    const { userId, product, quantity } = req.body;
 
-    if (!idCart) {
-      return res.status(400).json({ error: "No active cart session" });
+    if (!userId) {
+      return res.status(400).json({ error: "User ID is required" });
     }
-
-    let cart = await CartModel.findById(idCart);
+    let cart = await CartModel.findOne({ user: userId });
 
     if (!cart) {
-      return res.status(404).json({ error: "Cart not found" });
+      return res.status(404).json({ error: "Cart not found for this user" });
     }
 
     const existingProduct = cart.products.find(
       (item) => item.product.toString() === product
     );
-
     existingProduct.quantity = quantity;
     await cart.save();
-
     res.status(200).json({
       message: "Cart updated successfully",
       data: cart,
-      count: cart.products.length,
     });
   } catch (error) {
-    console.error("Error updating cart:", error);
     res.status(500).json({ error: "Internal Server Error" });
   }
 };
 
-const deleteItemFromCart = async (req, res) => {
+const deleteForUser = async (req, res) => {
   try {
-    const cartId = req.session.cart;
-    const productId = req.query.productId;
-    if (!cartId || !productId) {
+    const { userId } = req.query;
+    const { productId } = req.query;
+
+    if (!userId || !productId) {
       return res
         .status(400)
-        .json({ message: "Cart ID or Product ID is missing" });
+        .json({ message: "User ID or Product ID is missing" });
     }
 
-    let cart = await CartModel.findById(cartId);
+    let cart = await CartModel.findOne({ user: userId });
 
     if (!cart) {
-      return res.status(404).json({ message: "Cart not found" });
+      return res.status(404).json({ message: "Cart not found for this user" });
     }
 
-    // Find product in cart
     const productIndex = cart.products.findIndex(
       (item) => item.product.toString() === productId
     );
@@ -164,13 +154,10 @@ const deleteItemFromCart = async (req, res) => {
       return res.status(404).json({ message: "Product not found in cart" });
     }
 
-    // Remove the product from cart
     cart.products.splice(productIndex, 1);
 
-    // If cart is empty after removal, delete the cart
     if (cart.products.length === 0) {
-      await CartModel.findByIdAndDelete(cartId);
-      req.session.cart = null; // Clear session
+      await CartModel.deleteOne({ user: userId }); // Delete cart if empty
       return res.status(200).json({ message: "Cart deleted as it was empty" });
     }
 
@@ -186,10 +173,25 @@ const deleteItemFromCart = async (req, res) => {
   }
 };
 
+const deleteForAdmin = async (req, res) => {
+  try {
+    const userId = req.params.userId;
+    let cart = await CartModel.findByIdAndDelete({ user: userId });
+
+    res.status(200).json({
+      message: "Item deleted from cart successfully",
+      data: cart,
+    });
+  } catch (error) {
+    res.status(500).json({ message: "Internal server error", error });
+  }
+};
+
 module.exports = {
   getCartByUserId,
   addCart,
   updateCart,
   getCart,
-  deleteItemFromCart,
+  deleteForUser,
+  deleteForAdmin,
 };
