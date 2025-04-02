@@ -5,8 +5,8 @@ const getCart = async (req, res) => {
     let cart;
 
     cart = await CartModel.find()
-      .populate("products.product", "title price discount")
-      .populate("user", "username");
+      .populate("products.product", "_id title price discount img")
+      .populate("user", "_id username");
 
     if (!cart) {
       return res.status(404).json({ error: "Cart not found" });
@@ -15,10 +15,13 @@ const getCart = async (req, res) => {
     const formattedCarts = cart.map((data) => ({
       _id: data._id,
       username: data.user?.username || "",
-      products:
+      userId: data.user._id,
+      cart:
         data.products?.map((item) => ({
+          productId: item.product._id,
           productName: item.product?.title || "Unknown Product",
           quantity: item.quantity,
+          img: item.product.img || "img",
           totalPrice:
             ((item.product?.price || 0) - (item.product?.discount || 0)) *
             item.quantity,
@@ -32,37 +35,40 @@ const getCart = async (req, res) => {
   }
 };
 
-const getCartByUserId = async (req, res) => {
+const getCartByCartId = async (req, res) => {
   try {
-    const userId = req.params.userId;
+    const cartId = req.params.cartId;
 
-    if (!userId) {
-      return res.status(400).json({ message: "User ID is required" });
+    if (!cartId) {
+      return res.status(400).json({ message: "Cart ID is required" });
     }
 
-    const cart = await CartModel.findOne({ user: userId })
-      .populate("products.product", "title price discount")
+    const cart = await CartModel.findById(cartId)
+      .populate("products.product", "title price discount img")
       .populate("user", "username");
 
     if (!cart) {
-      return res.status(404).json({ message: "Cart not found for this user" });
+      return res.status(404).json({ message: "Cart not found" });
     }
 
     const formattedCart = {
       _id: cart._id,
       username: cart.user?.username || "Guest",
-      products: cart.products.map((item) => ({
+      cart: cart.products.map((item) => ({
         productName: item.product?.title || "Unknown Product",
         quantity: item.quantity,
+        img: item.product?.img || "img",
         totalPrice:
           (item.product.price - item.product.discount) * item.quantity,
       })),
     };
 
-    res
-      .status(200)
-      .json({ message: "Cart retrieved successfully", data: formattedCart });
+    res.status(200).json({
+      message: "Cart retrieved successfully",
+      data: formattedCart,
+    });
   } catch (error) {
+    console.error("Error fetching cart:", error);
     res.status(500).json({ message: "Internal Server Error", error });
   }
 };
@@ -71,7 +77,6 @@ const addCart = async (req, res) => {
   try {
     const { userId, products } = req.body;
     let cart = await CartModel.findOne({ user: userId });
-
     if (cart) {
       products.forEach((newItem) => {
         const existingProduct = cart.products.find(
@@ -90,7 +95,7 @@ const addCart = async (req, res) => {
         .status(200)
         .json({ message: "Cart updated successfully", data: cart });
     } else {
-      const newCart = new CartModel({ user, products });
+      const newCart = new CartModel({ user: userId, products });
       await newCart.save();
 
       res
@@ -104,7 +109,7 @@ const addCart = async (req, res) => {
 
 const updateCart = async (req, res) => {
   try {
-    const { userId, product, quantity } = req.body;
+    const { userId, productId, quantity } = req.body;
 
     if (!userId) {
       return res.status(400).json({ error: "User ID is required" });
@@ -116,7 +121,7 @@ const updateCart = async (req, res) => {
     }
 
     const existingProduct = cart.products.find(
-      (item) => item.product.toString() === product
+      (item) => item.product.toString() === productId
     );
     existingProduct.quantity = quantity;
     await cart.save();
@@ -175,12 +180,15 @@ const deleteForUser = async (req, res) => {
 
 const deleteForAdmin = async (req, res) => {
   try {
-    const userId = req.params.userId;
-    let cart = await CartModel.findByIdAndDelete({ user: userId });
+    const cartId = req.params.cartId;
+    const deletedCart = await CartModel.findByIdAndDelete(cartId);
+
+    if (!deletedCart) {
+      return res.status(404).json({ message: "Cart not found" });
+    }
 
     res.status(200).json({
-      message: "Item deleted from cart successfully",
-      data: cart,
+      message: "Cart deleted successfully",
     });
   } catch (error) {
     res.status(500).json({ message: "Internal server error", error });
@@ -188,7 +196,7 @@ const deleteForAdmin = async (req, res) => {
 };
 
 module.exports = {
-  getCartByUserId,
+  getCartByCartId,
   addCart,
   updateCart,
   getCart,

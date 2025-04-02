@@ -13,4 +13,8 @@ router
   .put(categoryController.updateCategory)
   .delete(categoryController.deleteCategory);
 
+router
+  .route("/:categoryId/product/:productId")
+  .delete(categoryController.deleteCategoryDetail);
+
 module.exports = router;
