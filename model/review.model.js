@@ -13,6 +13,7 @@ const reviewSchema = new Schema(
           type: mongoose.Schema.Types.ObjectId,
           ref: "UserModel",
         },
+        username: { type: String, required: true },
         rating: { type: Number, min: 1, max: 5 },
         content: {
           type: String,

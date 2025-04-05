@@ -27,12 +27,13 @@ const productSchema = new Schema({
   reviews: {
     type: [
       {
-        user: {
+        userId: {
           type: mongoose.Schema.Types.ObjectId,
           ref: "UserModel",
         },
+        username: { type: String },
         rating: { type: Number, min: 1, max: 5 },
-        body: { type: String },
+        content: { type: String },
       },
     ],
   },

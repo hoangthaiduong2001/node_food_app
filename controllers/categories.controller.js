@@ -114,7 +114,7 @@ const deleteCategoryDetail = async (req, res) => {
 
     const updatedCategory = await CategoryModel.findByIdAndUpdate(
       categoryId,
-      { $pull: { products: { _id: productId } } },
+      { $pull: { products: { product: { _id: productId } } } },
       { new: true }
     );
 

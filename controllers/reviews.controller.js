@@ -1,4 +1,5 @@
 const ReviewModel = require("../model/review.model");
+const ProductModel = require("../model/product.model");
 
 const getReviews = async (req, res) => {
   const search = req.query.search;
@@ -11,7 +12,8 @@ const getReviews = async (req, res) => {
     const data = await ReviewModel.find(filter)
       .skip(parseInt(start) - 1)
       .limit(parseInt(end))
-      .select("-_id")
+      .select("-_id -review.username")
+      .populate("review.product", "title img")
       .populate("review.reviewer", "username")
       .exec();
     res.status(200).json({ data });
@@ -25,7 +27,8 @@ const getReviewByIdProduct = async (req, res) => {
   const { id } = req.params;
   try {
     const data = await ReviewModel.find({ "review.product": id })
-      .select("-_id")
+      .select("-_id -review.username")
+      .populate("review.product", "title img")
       .populate("review.reviewer", "username")
       .exec();
     res.status(200).json({ data });
@@ -36,13 +39,43 @@ const getReviewByIdProduct = async (req, res) => {
 };
 
 const addReview = async (req, res) => {
-  const review = new ReviewModel(req.body);
   try {
-    const newReview = await review.save();
-    req.session.review = newReview._id;
-    res.status(200).json({ message: "Add review successfully" });
+    const { productId, userId, username, rating, content } = req.body.review;
+
+    const review = new ReviewModel({
+      review: {
+        product: productId,
+        reviewer: userId,
+        username,
+        content,
+        rating,
+      },
+    });
+    await review.save();
+
+    const updatedProduct = await ProductModel.findByIdAndUpdate(
+      productId,
+      {
+        $push: {
+          reviews: {
+            userId,
+            username,
+            rating,
+            content,
+          },
+        },
+      },
+      { new: true }
+    );
+
+    if (!updatedProduct) {
+      return res.status(404).json({ message: "Product not found" });
+    }
+    res
+      .status(200)
+      .json({ message: "Review added successfully", data: review });
   } catch (error) {
-    res.status(400).json(error);
+    res.status(400).json({ error: error.message });
   }
 };
 
