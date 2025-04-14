@@ -8,11 +8,6 @@ const orderSchema = new Schema(
       ref: "UserModel",
       required: true,
     },
-    address: {
-      type: String,
-      required: true,
-      maxlength: 200,
-    },
     total: {
       type: Number,
       default: 0,
@@ -49,7 +44,7 @@ orderSchema.pre("save", async function (next) {
   for (const item of this.products) {
     const product = await mongoose.model("ProductModel").findById(item.product);
     if (product) {
-      totalPrice += product.price * item.quantity;
+      totalPrice += (product.price - product.discount) * item.quantity;
     }
   }
   this.total = totalPrice;

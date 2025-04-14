@@ -40,7 +40,7 @@ app.use(
 );
 
 app.use("/products", require("./routes/products"));
-app.use("/orders", auth, require("./routes/orders"));
+app.use("/orders", require("./routes/orders"));
 app.use("/carts", require("./routes/carts"));
 app.use("/categories", require("./routes/categories"));
 app.use("/reviews", require("./routes/reviews"));

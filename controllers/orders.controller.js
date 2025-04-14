@@ -6,8 +6,9 @@ const addNewOrder = async (req, res) => {
     const newOrder = await Order.save();
     res
       .status(200)
-      .json({ data: newOrder, message: "added a new Order successfully!" });
+      .json({ message: "Added a new Order successfully!", data: newOrder });
   } catch (error) {
+    console.log("error", error);
     res.status(400).json(error);
   }
 };
@@ -15,8 +16,11 @@ const addNewOrder = async (req, res) => {
 const getOrder = async (req, res) => {
   const id = req.params.id;
   try {
-    const order = await OrderModel.findById(id).exec();
-    res.status(200).json(order);
+    const order = await OrderModel.findById(id)
+      .populate("customer", "username")
+      .populate("products.product", "title price img")
+      .exec();
+    res.status(200).json({ message: "Get order successfully", data: order });
   } catch (error) {
     console.log("error", error);
     res.status(400).json(error);
@@ -32,7 +36,8 @@ const getOrders = async (req, res) => {
   if (search) filter = { title: search };
   try {
     const orders = await OrderModel.find(filter)
-      .populate("products.product")
+      .populate("customer", "username address")
+      .populate("products.product", "title price discount img")
       .skip(parseInt(start) - 1)
       .limit(parseInt(end))
       .exec();
