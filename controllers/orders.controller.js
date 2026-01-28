@@ -1,12 +1,31 @@
 const OrderModel = require("../model/order.model");
+const NotificationModel = require("../model/notification.model");
+const UserModel = require("../model/user.model");
 
 const addNewOrder = async (req, res) => {
   const Order = new OrderModel(req.body);
   try {
+    const user = await UserModel.findById(req.body.customer).select("username");
+    if (!user) {
+      return res.status(404).json({ message: "User not found" });
+    }
+    const notification = new NotificationModel({
+      username: user.username,
+      order: Order._id,
+      status: "unread",
+    });
+
     const newOrder = await Order.save();
-    res
-      .status(200)
-      .json({ message: "Added a new Order successfully!", data: newOrder });
+    await notification.save();
+
+    const io = req.app.get("io");
+    const listNotification = await NotificationModel.find();
+    io.emit("newOrder", listNotification);
+
+    res.status(200).json({
+      message: "Added a new Order successfully!",
+      data: newOrder,
+    });
   } catch (error) {
     console.log("error", error);
     res.status(400).json(error);

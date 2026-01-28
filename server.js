@@ -1,16 +1,30 @@
 const express = require("express");
 const path = require("path");
 const cors = require("cors");
+const http = require("http");
+const socketIo = require("socket.io");
 const session = require("express-session");
 const corsOptions = require("./config/corsOptions");
 const errorHandler = require("./middleware/errorHandler");
 const { connectDb, sessionCollection } = require("./config/db");
 const auth = require("./middleware/authentication");
 const bodyParser = require("body-parser");
+const { Server } = require("socket.io");
 
 const PORT = process.env.PORT || 3500;
 const app = express();
+const server = http.createServer(app);
+const io = new Server(server, {
+  cors: {
+    origin: "*",
+  },
+});
+app.set("io", io);
+io.on("connection", (socket) => {
+  console.log("A user connected:", socket.id);
+});
 app.set("trust proxy", 1);
+
 connectDb();
 
 app.use(cors({ origin: "http://localhost:3001", credentials: true }));
@@ -47,7 +61,7 @@ app.use("/reviews", require("./routes/reviews"));
 app.use("/password", require("./routes/users"));
 app.use("/session", require("./routes/users"));
 app.use("/user", require("./routes/users"));
+app.use("/notification", require("./routes/notification"));
 app.use("/upload", require("./routes/uploadFile"));
 
-app.use(errorHandler);
-app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
+server.listen(PORT, () => console.log(`Server running on port ${PORT}`));
