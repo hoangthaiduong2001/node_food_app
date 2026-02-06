@@ -5,19 +5,15 @@ const Schema = mongoose.Schema;
 const userSchema = new Schema({
   username: {
     type: String,
-    required: true,
   },
   password: {
     type: String,
-    required: true,
   },
   address: {
     type: String,
-    required: true,
   },
   phone: {
     type: String,
-    required: true,
   },
   email: {
     type: String,
@@ -30,12 +26,26 @@ const userSchema = new Schema({
     enum: ["user", "admin"],
     default: "user",
   },
-
+  img: {
+    type: String,
+    default:
+      "https://storage.googleapis.com/cloud-image-food-app.firebasestorage.app/images/1770179834033-default_icon.jpg",
+  },
   resetPasswordToken: {
     type: String,
   },
   resetPasswordExpires: {
     type: Date,
+  },
+  googleId: {
+    type: String,
+    unique: true,
+    sparse: true,
+  },
+  provider: {
+    type: String,
+    enum: ["local", "google"],
+    default: "local",
   },
 });
 
@@ -44,7 +54,7 @@ userSchema.index(
   {
     unique: true,
     partialFilterExpression: { username: { $exists: true, $ne: null } },
-  }
+  },
 );
 
 userSchema.post("save", function (error, doc, next) {

@@ -9,9 +9,12 @@ router
 
 router
   .route("/:id")
-  .get(orderController.getOrder)
   .put(orderController.updateOrder)
   .delete(orderController.deleteOrder);
+
+router.route("/:userId").get(orderController.getOrderByUserId);
+
+router.route("/status/:id").put(orderController.updateOrderStatus);
 
 router.route("/payment/:id").put(orderController.paymentOrder);
 

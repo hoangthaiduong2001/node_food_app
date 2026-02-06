@@ -32,10 +32,8 @@ app.use(bodyParser.json());
 app.use(
   bodyParser.urlencoded({
     extended: false,
-  })
+  }),
 );
-
-app.use("/images", express.static(path.join(__dirname, "/images")));
 
 app.use(
   session({
@@ -50,7 +48,7 @@ app.use(
       secure: false,
       httpOnly: true,
     },
-  })
+  }),
 );
 
 app.use("/products", require("./routes/products"));
@@ -59,7 +57,7 @@ app.use("/carts", require("./routes/carts"));
 app.use("/categories", require("./routes/categories"));
 app.use("/reviews", require("./routes/reviews"));
 app.use("/password", require("./routes/users"));
-app.use("/session", require("./routes/users"));
+app.use("/auth", require("./routes/auth"));
 app.use("/user", require("./routes/users"));
 app.use("/notification", require("./routes/notification"));
 app.use("/upload", require("./routes/uploadFile"));

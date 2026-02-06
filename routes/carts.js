@@ -10,8 +10,8 @@ router
   .delete(cartController.deleteForUser);
 
 router
-  .route("/:cartId")
-  .get(cartController.getCartByCartId)
+  .route("/:userId")
+  .get(cartController.getCartByUserId)
   .delete(cartController.deleteForAdmin);
 
 module.exports = router;

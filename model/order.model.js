@@ -3,7 +3,7 @@ const Schema = mongoose.Schema;
 
 const orderSchema = new Schema(
   {
-    customer: {
+    userId: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "UserModel",
       required: true,
@@ -35,8 +35,26 @@ const orderSchema = new Schema(
       type: Date,
     },
   },
-  { timestamps: true }
+  { timestamps: true },
 );
+
+orderSchema.virtual("user", {
+  ref: "UserModel",
+  localField: "userId",
+  foreignField: "_id",
+  justOne: true,
+});
+
+orderSchema.set("toJSON", {
+  virtuals: true,
+  transform(_, ret) {
+    ret.id = ret._id.toString();
+    delete ret._id;
+    delete ret.userId;
+    delete ret.__v;
+    return ret;
+  },
+});
 
 orderSchema.pre("save", async function (next) {
   if (!this.isModified("products")) return next();

@@ -35,7 +35,7 @@ const connectDb = async () => {
     await mongoose.connect(databaseUrl);
   } catch (error) {
     console.log(error);
-    //  return error;
+    return error;
   }
 };
 
@@ -47,4 +47,5 @@ const sessionCollection = () => {
 
   return store;
 };
+
 module.exports = { connectDb, sessionCollection };

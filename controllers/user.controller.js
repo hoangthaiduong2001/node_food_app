@@ -2,18 +2,20 @@ const UserModel = require("../model/user.model");
 const bcrypt = require("bcrypt");
 const nodemailer = require("nodemailer");
 const jwt = require("jsonwebtoken");
+const bucket = require("../config/firebase");
+const mongoose = require("mongoose");
 
 const signup = async (req, res, next) => {
   const { password, email } = req.body;
 
-  const hasedPassword = await bcrypt.hash(password, 12);
+  const hashedPassword = await bcrypt.hash(password, 12);
   try {
     const user = new UserModel({
       ...req.body,
-      password: hasedPassword,
+      password: hashedPassword,
     });
     await user.save();
-    req.session.islogin = true;
+    req.session.isLogin = true;
     req.session.user = user._id;
     res
       .status(201)
@@ -38,7 +40,7 @@ const login = async (req, res, next) => {
       return res.status(404).json({ message: "Incorrect password" });
     }
 
-    req.session.islogin = true;
+    req.session.isLogin = true;
     req.session.user = user._id;
     req.session.save();
     user.password = undefined;
@@ -50,7 +52,7 @@ const login = async (req, res, next) => {
 
 const logout = async (req, res, next) => {
   try {
-    req.session.islogin = false;
+    req.session.isLogin = false;
     res.status(200).json({ message: "you have logout successfully" });
   } catch (error) {
     res.status(404).json({ message: error });
@@ -58,7 +60,7 @@ const logout = async (req, res, next) => {
 };
 
 const isLogin = async (req, res, next) => {
-  if ((await req.session?.islogin) && (await req.session?.user)) {
+  if ((await req.session?.isLogin) && (await req.session?.user)) {
     const user = await UserModel.findById(req.session.user);
     const newUser = {
       email: user.email,
@@ -70,6 +72,7 @@ const isLogin = async (req, res, next) => {
     res.status(404).json({ message: "You are not login" });
   }
 };
+
 const forgetPassword = async (req, res, next) => {
   const { email } = req.body;
   const user = await UserModel.findOne({ email: email });
@@ -80,7 +83,7 @@ const forgetPassword = async (req, res, next) => {
     expiresIn: "30m",
   });
   user.resetPasswordToken = token;
-  user.resetPasswordExpires = Date.now() + 900000; // 15 minutes
+  user.resetPasswordExpires = Date.now() + 900000;
   await user.save();
 
   const transporter = nodemailer.createTransport({
@@ -140,7 +143,7 @@ const updatePasswordWithToken = async (req, res, next) => {
 
   try {
     await user.save();
-    req.session.islogin = true;
+    req.session.isLogin = true;
     req.session.user = user._id;
     res.status(200).json({ message: "password is updated ...." });
   } catch (error) {
@@ -195,11 +198,11 @@ const getUserById = async (req, res) => {
 
 const createUser = async (req, res, next) => {
   const { password } = req.body;
-  const hasedPassword = await bcrypt.hash(password, 12);
+  const hashedPassword = await bcrypt.hash(password, 12);
   try {
     const user = new UserModel({
       ...req.body,
-      password: hasedPassword,
+      password: hashedPassword,
     });
     await user.save();
     const { password, ...userWithoutPassword } = user.toObject();
@@ -213,17 +216,48 @@ const createUser = async (req, res, next) => {
 
 const updateUser = async (req, res) => {
   const id = req.params.id;
+
+  if (!mongoose.Types.ObjectId.isValid(id)) {
+    return res.status(400).json({ message: "Invalid user id" });
+  }
+
   try {
-    const user = await UserModel.findOneAndUpdate(
-      { _id: id },
-      { $set: req.body },
-      { new: true }
-    )
-      .select("-password")
-      .exec();
-    res.status(200).json({ message: "Update user successfully", data: user });
+    const updateData = { ...req.body };
+
+    if (req.file) {
+      const fileName = `users/${Date.now()}-${req.file.originalname}`;
+      const file = bucket.file(fileName);
+
+      await file.save(req.file.buffer, {
+        metadata: {
+          contentType: req.file.mimetype,
+        },
+      });
+
+      await file.makePublic();
+
+      updateData.img = `https://storage.googleapis.com/${bucket.name}/${fileName}`;
+    }
+
+    const user = await UserModel.findByIdAndUpdate(
+      id,
+      { $set: updateData },
+      { new: true, runValidators: true },
+    ).select("-password");
+
+    if (!user) {
+      return res.status(404).json({ message: "User not found" });
+    }
+
+    res.status(200).json({
+      message: "Update user successfully",
+      data: user,
+    });
   } catch (error) {
-    res.status(400).json(error);
+    res.status(400).json({
+      message: "Update user failed",
+      error: error.message,
+    });
   }
 };
 

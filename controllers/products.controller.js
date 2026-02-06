@@ -1,4 +1,6 @@
 const ProductModel = require("../model/product.model");
+const mongoose = require("mongoose");
+const bucket = require("../config/firebase");
 const fs = require("fs");
 
 const getAllProducts = async (req, res) => {
@@ -76,13 +78,22 @@ const getProductById = async (req, res) => {
 const addNewProduct = async (req, res) => {
   let data = req.body;
   if (req.file) {
-    const filePath = process.env.API || "http://localhost:3500";
-    data = { ...data, img: `${filePath}/images/${req.file.filename}` };
+    const fileName = `product/${Date.now()}-${req.file.originalname}`;
+    const file = bucket.file(fileName);
+
+    await file.save(req.file.buffer, {
+      metadata: {
+        contentType: req.file.mimetype,
+      },
+    });
+
+    await file.makePublic();
+    data.img = `https://storage.googleapis.com/${bucket.name}/${fileName}`;
   }
+
   const product = new ProductModel(data);
   try {
     await product.save();
-    //product.averageRating;
     res
       .status(200)
       .json({ message: "Add a new product successfully", data: product });
@@ -94,18 +105,32 @@ const addNewProduct = async (req, res) => {
 
 const updateProduct = async (req, res) => {
   const id = req.params.id;
-  let data = req.body;
-  if (req.file) {
-    const filePath = process.env.API || "http://localhost:3500";
-    data = { ...data, img: `${filePath}/images/${req.file.filename}` };
+  if (!mongoose.Types.ObjectId.isValid(id)) {
+    return res.status(400).json({ message: "Invalid product id" });
   }
+  let data = req.body;
+
   try {
+    if (req.file) {
+      const fileName = `product/${Date.now()}-${req.file.originalname}`;
+      const file = bucket.file(fileName);
+
+      await file.save(req.file.buffer, {
+        metadata: {
+          contentType: req.file.mimetype,
+        },
+      });
+
+      await file.makePublic();
+
+      data.img = `https://storage.googleapis.com/${bucket.name}/${fileName}`;
+    }
     const product = await ProductModel.findByIdAndUpdate(
       id,
       {
         $set: data,
       },
-      { new: true }
+      { new: true },
     ).exec();
     res
       .status(200)
@@ -147,24 +172,10 @@ const deleteProduct = async (req, res) => {
   }
 };
 
-const uploadImage = async (req, res) => {
-  if (req.file) {
-    const filePath = process.env.API || "http://localhost:3500";
-    const id = req.params.id;
-    await ProductModel.updateOne(
-      { _id: id },
-      { img: `${filePath}/images/${req.file.filename}` }
-    ).exec();
-    res.status(200).json({ message: "Upload image successfully" });
-  } else {
-    res.status(500).json("err");
-  }
-};
 module.exports = {
   deleteProduct,
   getAllProducts,
   getProductById,
   addNewProduct,
   updateProduct,
-  uploadImage,
 };

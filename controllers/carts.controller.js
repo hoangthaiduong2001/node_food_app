@@ -1,4 +1,5 @@
 const CartModel = require("../model/cart.model");
+const mongoose = require("mongoose");
 
 const getCart = async (req, res) => {
   try {
@@ -73,6 +74,58 @@ const getCartByCartId = async (req, res) => {
   }
 };
 
+const getCartByUserId = async (req, res) => {
+  try {
+    const { userId } = req.params;
+
+    if (!mongoose.Types.ObjectId.isValid(userId)) {
+      return res.status(400).json({ message: "Invalid user ID" });
+    }
+
+    const cart = await CartModel.findOne({ user: userId })
+      .populate("user", "username")
+      .populate("products.product", "title price discount img")
+      .lean();
+
+    if (!cart) {
+      return res.status(404).json({
+        message: "Cart not found for this user",
+      });
+    }
+
+    const formattedCart = {
+      _id: cart._id,
+      userId: cart.user?._id,
+      username: cart.user?.username || "Guest",
+      products: cart.products.map((item) => {
+        const price = item.product
+          ? item.product.price - (item.product.discount || 0)
+          : 0;
+
+        return {
+          productId: item.product?._id,
+          productName: item.product?.title || "Unknown Product",
+          quantity: item.quantity,
+          img: item.product?.img || "",
+          unitPrice: price,
+          totalPrice: price * item.quantity,
+        };
+      }),
+    };
+
+    res.status(200).json({
+      message: "Get cart successfully",
+      data: formattedCart,
+    });
+  } catch (error) {
+    console.error("Error fetching cart by userId:", error);
+    res.status(500).json({
+      message: "Internal Server Error",
+      error: error.message,
+    });
+  }
+};
+
 const addCart = async (req, res) => {
   try {
     const { userId, products } = req.body;
@@ -80,7 +133,7 @@ const addCart = async (req, res) => {
     if (cart) {
       products.forEach((newItem) => {
         const existingProduct = cart.products.find(
-          (item) => item.product.toString() === newItem.product
+          (item) => item.product.toString() === newItem.product,
         );
 
         if (existingProduct) {
@@ -121,7 +174,7 @@ const updateCart = async (req, res) => {
     }
 
     const existingProduct = cart.products.find(
-      (item) => item.product.toString() === productId
+      (item) => item.product.toString() === productId,
     );
     existingProduct.quantity = quantity;
     await cart.save();
@@ -152,7 +205,7 @@ const deleteForUser = async (req, res) => {
     }
 
     const productIndex = cart.products.findIndex(
-      (item) => item.product.toString() === productId
+      (item) => item.product.toString() === productId,
     );
 
     if (productIndex === -1) {
@@ -196,7 +249,7 @@ const deleteForAdmin = async (req, res) => {
 };
 
 module.exports = {
-  getCartByCartId,
+  getCartByUserId,
   addCart,
   updateCart,
   getCart,

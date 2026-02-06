@@ -1,8 +1,7 @@
 const UserModel = require("../model/user.model");
 
 const isAdminAuth = async (req, res, next) => {
-  console.log("req.session", req.session);
-  if (req.session.islogin) {
+  if (req.session.isLogin) {
     const user = await UserModel.findById(req.session?.user).exec();
     if (user && user.role === "admin") {
       next();
@@ -10,7 +9,7 @@ const isAdminAuth = async (req, res, next) => {
       return res.status(400).json({ message: "authorized" });
     }
   } else {
-    res.status(400).json("Unauthication");
+    res.status(400).json("Un Authorization");
   }
 };
 

@@ -1,19 +1,8 @@
+const upload = require("../middleware/upload");
 const userController = require("../controllers/user.controller");
 require("../middleware/authentication");
 
 const router = require("express").Router();
-
-router.route("/checkLogin").get(userController.isLogin);
-
-router.route("/signup").post(userController.signup);
-
-router.route("/login").post(userController.login);
-
-router.route("/logout").get(userController.logout);
-
-router.route("/forgetpassword").post(userController.forgetPassword);
-
-router.route("/updatepassword").put(userController.updatePassword);
 
 router
   .route("/")
@@ -23,11 +12,9 @@ router
 router
   .route("/:id")
   .get(userController.getUserById)
-  .put(userController.updateUser)
+  .put(upload.single("file"), userController.updateUser)
   .delete(userController.deleteUser);
 
-router
-  .route("/updatepassword/:token")
-  .put(userController.updatePasswordWithToken);
+router.route("/updatePassword").put(userController.updatePassword);
 
 module.exports = router;
