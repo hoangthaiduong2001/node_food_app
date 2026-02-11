@@ -15,6 +15,4 @@ router
   .put(upload.single("file"), userController.updateUser)
   .delete(userController.deleteUser);
 
-router.route("/updatePassword").put(userController.updatePassword);
-
 module.exports = router;

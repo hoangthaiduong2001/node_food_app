@@ -143,15 +143,15 @@ const updateOrderStatus = async (req, res) => {
       });
     }
 
-    if (order.payment === "paid") {
-      return res.status(403).json({
-        message: "Cannot update status of a paid order",
-      });
-    }
-
     if (!["waiting", "received", "cancelled"].includes(status)) {
       return res.status(400).json({
         message: "Invalid status value",
+      });
+    }
+
+    if (order.payment === "paid") {
+      return res.status(403).json({
+        message: "Cannot update status of a paid order",
       });
     }
 
@@ -183,6 +183,12 @@ const paymentOrder = async (req, res) => {
     if (!order) {
       return res.status(404).json({
         message: "Order not found",
+      });
+    }
+
+    if (!["paid", "unpaid"].includes(payment)) {
+      return res.status(400).json({
+        message: "Invalid payment value",
       });
     }
 

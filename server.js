@@ -7,7 +7,7 @@ const session = require("express-session");
 const corsOptions = require("./config/corsOptions");
 const errorHandler = require("./middleware/errorHandler");
 const { connectDb, sessionCollection } = require("./config/db");
-const auth = require("./middleware/authentication");
+const { auth } = require("./middleware/authentication");
 const bodyParser = require("body-parser");
 const { Server } = require("socket.io");
 
@@ -51,15 +51,15 @@ app.use(
   }),
 );
 
-app.use("/products", require("./routes/products"));
-app.use("/orders", require("./routes/orders"));
-app.use("/carts", require("./routes/carts"));
-app.use("/categories", require("./routes/categories"));
-app.use("/reviews", require("./routes/reviews"));
-app.use("/password", require("./routes/users"));
+app.use("/products", auth, require("./routes/products"));
+app.use("/orders", auth, require("./routes/orders"));
+app.use("/carts", auth, require("./routes/carts"));
+app.use("/categories", auth, require("./routes/categories"));
+app.use("/reviews", auth, require("./routes/reviews"));
+app.use("/password", auth, require("./routes/users"));
 app.use("/auth", require("./routes/auth"));
-app.use("/user", require("./routes/users"));
-app.use("/notification", require("./routes/notification"));
-app.use("/upload", require("./routes/uploadFile"));
+app.use("/user", auth, require("./routes/users"));
+app.use("/notification", auth, require("./routes/notification"));
+app.use("/upload", auth, require("./routes/uploadFile"));
 
 server.listen(PORT, () => console.log(`Server running on port ${PORT}`));

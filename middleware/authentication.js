@@ -1,4 +1,5 @@
 const UserModel = require("../model/user.model");
+const jwt = require("jsonwebtoken");
 
 const isAdminAuth = async (req, res, next) => {
   if (req.session.isLogin) {
@@ -13,4 +14,22 @@ const isAdminAuth = async (req, res, next) => {
   }
 };
 
-module.exports = isAdminAuth;
+const auth = (req, res, next) => {
+  const authHeader = req.headers.authorization;
+
+  if (!authHeader?.startsWith("Bearer ")) {
+    return res.status(401).json({ message: "Unauthorized" });
+  }
+
+  const token = authHeader.split(" ")[1];
+
+  try {
+    const decoded = jwt.verify(token, process.env.JWT_ACCESS_SECRET);
+    req.user = decoded;
+    next();
+  } catch (error) {
+    res.status(401).json({ message: "Access token expired or invalid" });
+  }
+};
+
+module.exports = { isAdminAuth, auth };
