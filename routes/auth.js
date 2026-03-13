@@ -9,9 +9,13 @@ router.route("/signup").post(authController.signup);
 
 router.route("/login").post(authController.login);
 
-router.route("/logout").get(authController.logout);
+router.route("/logout").post(authController.logout);
 
-router.route("/forgotPassword").post(authController.forgetPassword);
+router.route("/forgotPassword").post(authController.forgotPassword);
+
+router.route("/verifyOtp").post(authController.verifyOtp);
+
+router.route("/resetPassword").post(authController.resetPassword);
 
 router.post("/google", authController.googleLogin);
 

@@ -8,6 +8,8 @@ router
   .get(productController.getAllProducts)
   .post(upload.single("file"), productController.addNewProduct);
 
+router.route("/topRating").get(productController.getTopRatedProducts);
+
 router
   .route("/:id")
   .get(productController.getProductById)

@@ -61,6 +61,47 @@ const getAllProducts = async (req, res) => {
   }
 };
 
+const getTopRatedProducts = async (req, res) => {
+  try {
+    const products = await ProductModel.aggregate([
+      {
+        $addFields: {
+          averageRating: {
+            $cond: [
+              { $gt: [{ $size: "$reviews" }, 0] },
+              { $avg: "$reviews.rating" },
+              0,
+            ],
+          },
+        },
+      },
+
+      {
+        $sort: { averageRating: -1 },
+      },
+
+      {
+        $limit: 3,
+      },
+
+      {
+        $project: {
+          id: "$_id",
+          title: 1,
+          desc: 1,
+          img: 1,
+          averageRating: 1,
+          _id: 0,
+        },
+      },
+    ]);
+
+    res.status(200).json(products);
+  } catch (err) {
+    res.status(400).json(err);
+  }
+};
+
 const getProductById = async (req, res) => {
   const { id } = req.params;
   try {
@@ -175,6 +216,7 @@ const deleteProduct = async (req, res) => {
 module.exports = {
   deleteProduct,
   getAllProducts,
+  getTopRatedProducts,
   getProductById,
   addNewProduct,
   updateProduct,

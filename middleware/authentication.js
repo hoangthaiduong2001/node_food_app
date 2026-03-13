@@ -10,11 +10,11 @@ const isAdminAuth = async (req, res, next) => {
       return res.status(400).json({ message: "authorized" });
     }
   } else {
-    res.status(400).json("Un Authorization");
+    res.status(400).json("Unauthorized");
   }
 };
 
-const auth = (req, res, next) => {
+const auth = async (req, res, next) => {
   const authHeader = req.headers.authorization;
 
   if (!authHeader?.startsWith("Bearer ")) {
@@ -25,10 +25,24 @@ const auth = (req, res, next) => {
 
   try {
     const decoded = jwt.verify(token, process.env.JWT_ACCESS_SECRET);
-    req.user = decoded;
+
+    const user = await UserModel.findById(decoded.userId);
+
+    if (!user) {
+      return res.status(401).json({ message: "User not found" });
+    }
+
+    if (user.tokenVersion !== decoded.tokenVersion) {
+      return res.status(401).json({ message: "Token has been revoked" });
+    }
+
+    req.user = user;
+
     next();
   } catch (error) {
-    res.status(401).json({ message: "Access token expired or invalid" });
+    return res.status(401).json({
+      message: "Access token expired or invalid",
+    });
   }
 };
 

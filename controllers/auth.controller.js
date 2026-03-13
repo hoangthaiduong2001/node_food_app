@@ -3,7 +3,12 @@ const jwt = require("jsonwebtoken");
 const UserModel = require("../model/user.model");
 const nodemailer = require("nodemailer");
 const bcrypt = require("bcrypt");
-const { generateAccessToken, generateRefreshToken } = require("../utils/jwt");
+
+const {
+  generateAccessToken,
+  generateRefreshToken,
+  capitalizeChar,
+} = require("../utils/jwt");
 const TokenModel = require("../model/token.model");
 const checkToken = require("../middleware/checkRefreshToken");
 
@@ -23,6 +28,7 @@ const googleLogin = async (req, res) => {
     });
 
     const payload = ticket.getPayload();
+
     const { sub, email, name, picture } = payload;
 
     let user = await UserModel.findOne({
@@ -79,16 +85,27 @@ const googleLogin = async (req, res) => {
 };
 
 const signup = async (req, res) => {
-  const { password } = req.body;
-
   try {
-    const hashedPassword = await bcrypt.hash(password, 12);
-    const user = new UserModel({
-      ...req.body,
-      password: hashedPassword,
-    });
+    let { username, email, password, address, phone } = req.body;
 
-    await user.save();
+    if (!username || !email || !password) {
+      return res.status(400).json({
+        message: "Username, email and password are required",
+      });
+    }
+
+    username = username.trim();
+    email = email.trim().toLowerCase();
+
+    const hashedPassword = await bcrypt.hash(password, 12);
+
+    const user = await UserModel.create({
+      username,
+      email,
+      password: hashedPassword,
+      address,
+      phone,
+    });
 
     const accessToken = generateAccessToken(user);
     const refreshToken = generateRefreshToken(user);
@@ -100,10 +117,7 @@ const signup = async (req, res) => {
       expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
     });
 
-    user.refreshToken = refreshToken;
-    await user.save();
-
-    res.status(201).json({
+    return res.status(201).json({
       message: "Signup successfully",
       accessToken,
       refreshToken,
@@ -115,7 +129,29 @@ const signup = async (req, res) => {
       },
     });
   } catch (error) {
-    res.status(400).json({ message: error.message });
+    console.error(error);
+
+    if (error.code === 11000) {
+      const duplicatedField = Object.keys(error.keyPattern)[0];
+
+      return res.status(400).json({
+        message: `${capitalizeChar(duplicatedField)} already exists`,
+        field: duplicatedField,
+      });
+    }
+
+    if (error.name === "ValidationError") {
+      const firstError = Object.values(error.errors)[0];
+
+      return res.status(400).json({
+        message: firstError.message,
+        field: firstError.path,
+      });
+    }
+
+    return res.status(500).json({
+      message: "Internal server error",
+    });
   }
 };
 
@@ -126,13 +162,19 @@ const login = async (req, res) => {
     const user = await UserModel.findOne({ username });
 
     if (!user) {
-      return res.status(401).json({ message: "Invalid username or password" });
+      return res.status(401).json({
+        message: "Username does not exist",
+        field: "username",
+      });
     }
 
-    const isMatch = bcrypt.compare(password, user.password);
+    const isMatch = await bcrypt.compare(password, user.password);
 
     if (!isMatch) {
-      return res.status(401).json({ message: "Invalid username or password" });
+      return res.status(401).json({
+        message: "Incorrect password",
+        field: "password",
+      });
     }
 
     const accessToken = generateAccessToken(user);
@@ -148,7 +190,7 @@ const login = async (req, res) => {
     user.refreshToken = refreshToken;
     await user.save();
 
-    res.status(200).json({
+    return res.status(200).json({
       message: "Login successfully",
       accessToken,
       refreshToken,
@@ -160,20 +202,45 @@ const login = async (req, res) => {
       },
     });
   } catch (error) {
-    res.status(500).json({ message: error.message });
+    return res.status(500).json({
+      message: "Internal server error",
+    });
   }
 };
 
 const logout = async (req, res) => {
-  const { refreshToken } = req.body;
+  try {
+    const { refreshToken } = req.body;
 
-  await TokenModel.findOneAndUpdate(
-    { token: refreshToken, type: "refresh" },
-    { revoked: true },
-  );
+    if (!refreshToken) {
+      return res.status(400).json({ message: "Refresh token required" });
+    }
 
-  res.json({ message: "Logout successfully" });
+    const refreshDoc = await TokenModel.findOne({
+      token: refreshToken,
+      type: "refresh",
+      revoked: false,
+    });
+
+    if (!refreshDoc) {
+      return res.status(400).json({ message: "Invalid refresh token" });
+    }
+
+    const userId = refreshDoc.user;
+
+    refreshDoc.revoked = true;
+    await refreshDoc.save();
+
+    await UserModel.findByIdAndUpdate(userId, {
+      $inc: { tokenVersion: 1 },
+    });
+
+    res.json({ message: "Logout successfully" });
+  } catch (error) {
+    res.status(500).json({ message: "Logout failed" });
+  }
 };
+
 const isLogin = async (req, res, next) => {
   if ((await req.session?.isLogin) && (await req.session?.user)) {
     const user = await UserModel.findById(req.session.user);
@@ -188,40 +255,98 @@ const isLogin = async (req, res, next) => {
   }
 };
 
-const forgetPassword = async (req, res, next) => {
-  const { email } = req.body;
-  const user = await UserModel.findOne({ email: email });
-  if (!user) {
-    return res.status(404).json({ message: "User not found" });
-  }
-  const token = jwt.sign({ email }, process.env.JWT_SECRET, {
-    expiresIn: "30m",
-  });
-  user.resetPasswordToken = token;
-  user.resetPasswordExpires = Date.now() + 900000;
-  await user.save();
+const forgotPassword = async (req, res) => {
+  try {
+    let { email } = req.body;
 
-  const transporter = nodemailer.createTransport({
-    service: "gmail",
-    auth: {
-      user: process.env.EMAIL_USER,
-      pass: process.env.EMAIL_PASSWORD,
-    },
-  });
-  const mailOptions = {
-    from: process.env.EMAIL_USER,
-    to: email,
-    subject: "Reset your password",
-    html: `<p>Please click this <a href="http://localhost:3000/reset-password/${token}">link</a> to reset your password.</p>`,
-  };
-  transporter.sendMail(mailOptions, (error, info) => {
-    if (error) {
-      console.log(error);
-    } else {
-      console.log("Email sent: " + info.response);
+    email = email.trim().toLowerCase();
+
+    const user = await UserModel.findOne({ email });
+
+    if (!user) {
+      return res.status(200).json({
+        message: "If this email exists, an OTP has been sent",
+      });
     }
-    res.status(200).json({ message: "Reset link sent to email" });
-  });
+
+    const otp = Math.floor(1000 + Math.random() * 9000).toString();
+
+    const hashedOtp = await bcrypt.hash(otp, 10);
+
+    await UserModel.updateOne(
+      { _id: user._id },
+      {
+        resetPasswordOtp: hashedOtp,
+        resetPasswordOtpExpires: Date.now() + 5 * 60 * 1000,
+      },
+    );
+
+    const transporter = nodemailer.createTransport({
+      service: "gmail",
+      auth: {
+        user: process.env.EMAIL_USER,
+        pass: process.env.EMAIL_PASSWORD,
+      },
+    });
+
+    await transporter.sendMail({
+      from: process.env.EMAIL_USER,
+      to: email,
+      subject: "Your OTP Code",
+      html: `
+        <h3>Password Reset OTP</h3>
+        <p>Your OTP code is:</p>
+        <h1>${otp}</h1>
+        <p>This code will expire in 5 minutes.</p>
+      `,
+    });
+
+    return res.status(200).json({
+      message: "OTP sent to email",
+    });
+  } catch (error) {
+    console.log(error);
+
+    return res.status(500).json({
+      message: "Internal server error",
+    });
+  }
+};
+
+const verifyOtp = async (req, res) => {
+  try {
+    const { email, otp } = req.body;
+
+    const user = await UserModel.findOne({ email });
+
+    if (!user || !user.resetPasswordOtp) {
+      return res.status(400).json({
+        message: "Invalid OTP",
+      });
+    }
+
+    if (user.resetPasswordOtpExpires < Date.now()) {
+      return res.status(400).json({
+        message: "OTP expired",
+      });
+    }
+
+    const isMatch = await bcrypt.compare(otp, user.resetPasswordOtp);
+
+    if (!isMatch) {
+      return res.status(400).json({
+        message: "Invalid OTP",
+      });
+    }
+
+    return res.status(200).json({
+      message: "OTP verified",
+    });
+  } catch (error) {
+    return res.status(500).json({
+      message: "Internal server error",
+    });
+  }
 };
 
 const updatePassword = async (req, res, next) => {
@@ -239,6 +364,53 @@ const updatePassword = async (req, res, next) => {
     res.status(200).json({ message: "Password is updated" });
   } catch (error) {
     return res.status(400).json({ message: error });
+  }
+};
+
+const resetPassword = async (req, res) => {
+  try {
+    const { email, otp, newPassword } = req.body;
+
+    const user = await UserModel.findOne({ email });
+
+    if (!user) {
+      return res.status(400).json({
+        message: "Invalid request",
+      });
+    }
+
+    if (user.resetPasswordOtpExpires < Date.now()) {
+      return res.status(400).json({
+        message: "OTP expired",
+      });
+    }
+
+    const isMatch = await bcrypt.compare(otp, user.resetPasswordOtp);
+
+    if (!isMatch) {
+      return res.status(400).json({
+        message: "Invalid OTP",
+      });
+    }
+
+    const hashedPassword = await bcrypt.hash(newPassword, 12);
+
+    await UserModel.updateOne(
+      { _id: user._id },
+      {
+        password: hashedPassword,
+        resetPasswordOtp: null,
+        resetPasswordOtpExpires: null,
+      },
+    );
+
+    return res.status(200).json({
+      message: "Password reset successfully",
+    });
+  } catch (error) {
+    return res.status(500).json({
+      message: "Internal server error",
+    });
   }
 };
 
@@ -274,18 +446,37 @@ const refreshToken = async (req, res) => {
   }
 
   try {
-    const isValid = await checkToken(refreshToken);
+    const tokenDoc = await TokenModel.findOne({
+      token: refreshToken,
+      type: "refresh",
+      revoked: false,
+    });
 
-    if (!isValid) {
+    if (!tokenDoc) {
       return res.status(403).json({ message: "Refresh token revoked" });
     }
 
     const decoded = jwt.verify(refreshToken, process.env.JWT_REFRESH_SECRET);
 
-    const newAccessToken = generateAccessToken({
-      _id: decoded.userId,
-      role: decoded.role,
-    });
+    const user = await UserModel.findById(decoded.userId);
+
+    if (!user) {
+      return res.status(403).json({ message: "User not found" });
+    }
+
+    if (user.tokenVersion !== decoded.tokenVersion) {
+      return res.status(403).json({ message: "Token version mismatch" });
+    }
+
+    const newAccessToken = jwt.sign(
+      {
+        userId: user._id,
+        role: user.role,
+        tokenVersion: user.tokenVersion,
+      },
+      process.env.JWT_ACCESS_SECRET,
+      { expiresIn: "10m" },
+    );
 
     res.json({ accessToken: newAccessToken });
   } catch (error) {
@@ -299,7 +490,9 @@ module.exports = {
   login,
   logout,
   isLogin,
-  forgetPassword,
+  forgotPassword,
+  verifyOtp,
+  resetPassword,
   updatePassword,
   updatePasswordWithToken,
   refreshToken,
