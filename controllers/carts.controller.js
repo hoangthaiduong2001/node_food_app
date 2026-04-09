@@ -94,7 +94,7 @@ const getCartByUserId = async (req, res) => {
     }
 
     const formattedCart = {
-      _id: cart._id,
+      id: cart._id,
       userId: cart.user?._id,
       username: cart.user?.username || "Guest",
       products: cart.products.map((item) => {
@@ -128,35 +128,67 @@ const getCartByUserId = async (req, res) => {
 
 const addCart = async (req, res) => {
   try {
-    const { userId, products } = req.body;
-    let cart = await CartModel.findOne({ user: userId });
-    if (cart) {
-      products.forEach((newItem) => {
-        const existingProduct = cart.products.find(
-          (item) => item.product.toString() === newItem.product,
-        );
+    let { userId, productId, quantity } = req.body;
 
-        if (existingProduct) {
-          existingProduct.quantity += newItem.quantity;
-        } else {
-          cart.products.push(newItem);
-        }
+    quantity = quantity ?? 1;
+
+    if (!userId || !productId) {
+      return res.status(400).json({
+        message: "Missing userId or productId",
       });
+    }
+
+    if (quantity <= 0) {
+      return res.status(400).json({
+        message: "Quantity must be greater than 0",
+      });
+    }
+
+    let cart = await CartModel.findOne({ user: userId });
+
+    if (cart) {
+      const existingProduct = cart.products.find(
+        (item) => item.product.toString() === productId,
+      );
+
+      if (existingProduct) {
+        existingProduct.quantity += quantity;
+      } else {
+        cart.products.push({
+          product: productId,
+          quantity,
+        });
+      }
 
       await cart.save();
-      res
-        .status(200)
-        .json({ message: "Cart updated successfully", data: cart });
-    } else {
-      const newCart = new CartModel({ user: userId, products });
-      await newCart.save();
 
-      res
-        .status(201)
-        .json({ message: "New cart created successfully", cart: newCart });
+      return res.status(200).json({
+        message: "Cart updated successfully",
+        data: cart,
+      });
     }
+
+    const newCart = new CartModel({
+      user: userId,
+      products: [
+        {
+          product: productId,
+          quantity,
+        },
+      ],
+    });
+
+    await newCart.save();
+
+    return res.status(201).json({
+      message: "New cart created successfully",
+      data: newCart,
+    });
   } catch (error) {
-    res.status(500).json({ error: "Internal Server Error" });
+    console.error("Add cart error:", error);
+    return res.status(500).json({
+      message: "Internal Server Error",
+    });
   }
 };
 
@@ -164,26 +196,52 @@ const updateCart = async (req, res) => {
   try {
     const { userId, productId, quantity } = req.body;
 
-    if (!userId) {
-      return res.status(400).json({ error: "User ID is required" });
+    if (!userId || !productId) {
+      return res.status(400).json({
+        error: "userId and productId are required",
+      });
     }
-    let cart = await CartModel.findOne({ user: userId });
+
+    if (quantity == null) {
+      return res.status(400).json({
+        error: "quantity is required",
+      });
+    }
+
+    const cart = await CartModel.findOne({ user: userId });
 
     if (!cart) {
-      return res.status(404).json({ error: "Cart not found for this user" });
+      return res.status(404).json({
+        error: "Cart not found for this user",
+      });
     }
 
-    const existingProduct = cart.products.find(
+    const productIndex = cart.products.findIndex(
       (item) => item.product.toString() === productId,
     );
-    existingProduct.quantity = quantity;
+
+    if (productIndex === -1) {
+      return res.status(404).json({
+        error: "Product not found in cart",
+      });
+    }
+
+    if (quantity === 0) {
+      cart.products.splice(productIndex, 1);
+    } else {
+      cart.products[productIndex].quantity = quantity;
+    }
+
     await cart.save();
+
     res.status(200).json({
       message: "Cart updated successfully",
-      data: cart,
     });
   } catch (error) {
-    res.status(500).json({ error: "Internal Server Error" });
+    console.error("Update cart error:", error);
+    res.status(500).json({
+      error: "Internal Server Error",
+    });
   }
 };
 
@@ -215,7 +273,7 @@ const deleteForUser = async (req, res) => {
     cart.products.splice(productIndex, 1);
 
     if (cart.products.length === 0) {
-      await CartModel.deleteOne({ user: userId }); // Delete cart if empty
+      await CartModel.deleteOne({ user: userId });
       return res.status(200).json({ message: "Cart deleted as it was empty" });
     }
 
@@ -250,6 +308,7 @@ const deleteForAdmin = async (req, res) => {
 
 module.exports = {
   getCartByUserId,
+  getCartByCartId,
   addCart,
   updateCart,
   getCart,

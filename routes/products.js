@@ -10,6 +10,8 @@ router
 
 router.route("/topRating").get(productController.getTopRatedProducts);
 
+router.route("/search").get(productController.searchProducts);
+
 router
   .route("/:id")
   .get(productController.getProductById)

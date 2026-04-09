@@ -3,50 +3,161 @@ const NotificationModel = require("../model/notification.model");
 const UserModel = require("../model/user.model");
 
 const addNewOrder = async (req, res) => {
-  const Order = new OrderModel(req.body);
   try {
-    const user = await UserModel.findById(req.body.userId).select("username");
+    const {
+      userId,
+      products,
+      address,
+      phone,
+      name,
+      paymentMethod,
+      description,
+      shippingFee,
+    } = req.body;
+
+    if (!userId || !products?.length || !address || !phone || !name) {
+      return res.status(400).json({
+        message: "Missing required fields",
+      });
+    }
+
+    const user = await UserModel.findById(userId).select("username");
     if (!user) {
       return res.status(404).json({ message: "User not found" });
     }
-    const notification = new NotificationModel({
+
+    const order = new OrderModel({
+      userId,
+      products,
+      address,
+      phone,
+      name,
+      paymentMethod,
+      description,
+      shippingFee,
+    });
+
+    const newOrder = await order.save();
+
+    const notification = await NotificationModel.create({
       username: user.username,
-      order: Order._id,
+      order: newOrder._id,
       status: "unread",
     });
 
-    const newOrder = await Order.save();
-    await notification.save();
-
     const io = req.app.get("io");
-    const listNotification = await NotificationModel.find();
-    io.emit("newOrder", listNotification);
+    io.emit("newOrder", notification);
 
-    res.status(200).json({
+    return res.status(201).json({
       message: "Added a new Order successfully!",
-      data: newOrder,
     });
   } catch (error) {
-    console.log("error", error);
-    res.status(400).json(error);
+    console.error("Add order error:", error);
+    return res.status(500).json({
+      message: "Internal server error",
+      error: error.message,
+    });
   }
 };
 
 const getOrderByUserId = async (req, res) => {
   const userId = req.params.userId;
+  const { status } = req.query;
+  console.log(status);
   try {
-    const orders = await OrderModel.find({ userId })
-      .populate("user", "username email")
-      .populate("products.product", "title price img")
-      .sort({ createdAt: -1 });
+    const query = { userId };
+
+    if (status) {
+      const validStatus = ["waiting", "received", "cancelled"];
+
+      if (!validStatus.includes(status)) {
+        return res.status(400).json({
+          message: "Invalid status",
+        });
+      }
+
+      query.status = status;
+    }
+
+    const orders = await OrderModel.find(query)
+      .select("status total name paymentMethod address createdAt")
+      .sort({ createdAt: -1 })
+      .lean();
+
+    const formatted = orders.map((order) => ({
+      id: order._id.toString(),
+      deliveryStatus: order.status,
+      address: order.address,
+      paymentMethod: order.paymentMethod,
+      totalPrice: order.total,
+      name: order.name,
+    }));
 
     res.status(200).json({
       message: "Get orders by user successfully",
-      data: orders,
+      data: formatted,
     });
   } catch (error) {
     console.error(error);
     res.status(500).json({ message: "Server error" });
+  }
+};
+
+const getOrderDetail = async (req, res) => {
+  const { orderId } = req.params;
+
+  try {
+    const order = await OrderModel.findById(orderId)
+      .populate("user", "username email")
+      .populate("products.productId", "title price img discount")
+      .lean();
+
+    if (!order) {
+      return res.status(404).json({
+        message: "Order not found",
+      });
+    }
+
+    const formatted = {
+      id: order._id.toString(),
+      name: order.name,
+      phone: order.phone,
+      address: order.address,
+      deliveryStatus: order.status,
+      paymentMethod: order.paymentMethod,
+      paymentStatus: order.payment,
+      description: order.description,
+      shippingFee: order.shippingFee,
+      totalPrice: order.total,
+
+      products: order.products.map((item) => ({
+        id: item.productId?._id,
+        title: item.productId?.title,
+        price: item.productId?.price,
+        discount: item.productId?.discount,
+        img: item.productId?.img,
+        quantity: item.quantity,
+      })),
+
+      user: order.user
+        ? {
+            username: order.user.username,
+            email: order.user.email,
+          }
+        : null,
+
+      createdAt: order.createdAt,
+    };
+
+    return res.status(200).json({
+      message: "Get order detail successfully",
+      data: formatted,
+    });
+  } catch (error) {
+    console.error(error);
+    return res.status(500).json({
+      message: "Server error",
+    });
   }
 };
 
@@ -133,49 +244,56 @@ const updateOrder = async (req, res) => {
 
 const updateOrderStatus = async (req, res) => {
   const { id } = req.params;
-  const { status } = req.body;
+  const { deliveryStatus } = req.body;
 
   try {
     const order = await OrderModel.findById(id);
+
     if (!order) {
       return res.status(404).json({
         message: "Order not found",
       });
     }
 
-    if (!["waiting", "received", "cancelled"].includes(status)) {
+    if (["received", "cancelled"].includes(order.status)) {
+      return res.status(400).json({
+        message: "Order already finalized",
+      });
+    }
+
+    if (!["received", "cancelled"].includes(deliveryStatus)) {
       return res.status(400).json({
         message: "Invalid status value",
       });
     }
 
-    if (order.payment === "paid") {
-      return res.status(403).json({
-        message: "Cannot update status of a paid order",
-      });
-    }
-
-    if (order.status === status) {
+    if (order.status === deliveryStatus) {
       return res.status(400).json({
         message: "Order already has this status",
       });
     }
 
-    order.status = status;
+    order.status = deliveryStatus;
+
+    if (deliveryStatus === "received" && order.paymentMethod === "cod") {
+      order.payment = "paid";
+    }
+
     await order.save();
 
-    res.status(200).json({
+    return res.status(200).json({
       message: "Update order status successfully",
-      data: order,
     });
   } catch (error) {
-    res.status(400).json(error);
+    console.error(error);
+    return res.status(500).json({
+      message: "Server error",
+    });
   }
 };
 
-const paymentOrder = async (req, res) => {
+const paymentOrderCod = async (req, res) => {
   const id = req.params.id;
-  const { payment } = req.body;
 
   try {
     const order = await OrderModel.findById(id);
@@ -186,9 +304,9 @@ const paymentOrder = async (req, res) => {
       });
     }
 
-    if (!["paid", "unpaid"].includes(payment)) {
+    if (order.paymentMethod !== "cod") {
       return res.status(400).json({
-        message: "Invalid payment value",
+        message: "This API is only for COD payment",
       });
     }
 
@@ -198,9 +316,9 @@ const paymentOrder = async (req, res) => {
       });
     }
 
-    if (payment !== "paid") {
+    if (order.status !== "received") {
       return res.status(400).json({
-        message: "Invalid payment update",
+        message: "Cannot complete payment before receiving order",
       });
     }
 
@@ -208,11 +326,14 @@ const paymentOrder = async (req, res) => {
     await order.save();
 
     res.status(200).json({
-      message: "Payment successfully",
+      message: "COD payment completed successfully",
+      data: order,
     });
   } catch (error) {
     console.error(error);
-    res.status(400).json(error);
+    res.status(500).json({
+      message: "Server error",
+    });
   }
 };
 
@@ -220,8 +341,9 @@ module.exports = {
   addNewOrder,
   getOrderByUserId,
   getOrders,
+  getOrderDetail,
   deleteOrder,
   updateOrder,
   updateOrderStatus,
-  paymentOrder,
+  paymentOrderCod,
 };

@@ -12,10 +12,14 @@ router
   .put(orderController.updateOrder)
   .delete(orderController.deleteOrder);
 
-router.route("/:userId").get(orderController.getOrderByUserId);
+router.route("/user/:userId").get(orderController.getOrderByUserId);
+
+router.route("/:orderId").get(orderController.getOrderDetail);
 
 router.route("/status/:id").put(orderController.updateOrderStatus);
 
-router.route("/payment/:id").put(orderController.paymentOrder);
+router.route("/paymentCod/:id").put(orderController.paymentOrderCod);
+
+router.route("/paymentWallet/:id").put(orderController.paymentOrderCod);
 
 module.exports = router;

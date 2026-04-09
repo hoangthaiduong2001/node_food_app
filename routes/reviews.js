@@ -10,7 +10,8 @@ router
 router
   .route("/:id")
   .get(reviewController.getReviewByIdProduct)
-  .put(reviewController.updateStatusReview)
-  .delete(reviewController.deleteReview);
+  .put(reviewController.updateStatusReview);
+
+router.route("/:reviewId").delete(reviewController.deleteReview);
 
 module.exports = router;

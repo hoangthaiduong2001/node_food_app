@@ -8,29 +8,65 @@ const orderSchema = new Schema(
       ref: "UserModel",
       required: true,
     },
+
     total: {
       type: Number,
       default: 0,
     },
+
     products: [
       {
-        product: {
+        productId: {
           type: mongoose.Schema.Types.ObjectId,
           ref: "ProductModel",
         },
         quantity: { type: Number, default: 1 },
       },
     ],
-    status: {
+
+    address: {
       type: String,
-      enum: ["waiting", "received", "cancelled"],
-      default: "waiting",
+      required: true,
     },
+
+    phone: {
+      type: String,
+      required: true,
+    },
+
+    name: {
+      type: String,
+      required: true,
+    },
+
+    paymentMethod: {
+      type: String,
+      enum: ["cod", "wallet"],
+      default: "cod",
+    },
+
     payment: {
       type: String,
       enum: ["unpaid", "paid"],
       default: "unpaid",
     },
+
+    description: {
+      type: String,
+      default: "",
+    },
+
+    shippingFee: {
+      type: Number,
+      default: 0,
+    },
+
+    status: {
+      type: String,
+      enum: ["waiting", "received", "cancelled"],
+      default: "waiting",
+    },
+
     date: {
       type: Date,
     },
@@ -58,14 +94,21 @@ orderSchema.set("toJSON", {
 
 orderSchema.pre("save", async function (next) {
   if (!this.isModified("products")) return next();
+
   let totalPrice = 0;
+
   for (const item of this.products) {
-    const product = await mongoose.model("ProductModel").findById(item.product);
+    const product = await mongoose
+      .model("ProductModel")
+      .findById(item.productId);
+
     if (product) {
       totalPrice += (product.price - product.discount) * item.quantity;
     }
   }
-  this.total = totalPrice;
+
+  this.total = totalPrice + (this.shippingFee || 0);
+
   next();
 });
 

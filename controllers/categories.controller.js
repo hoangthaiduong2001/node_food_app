@@ -1,47 +1,73 @@
 const CategoryModel = require("../model/category.model");
+const mongoose = require("mongoose");
 
 const getAllCategory = async (req, res) => {
-  const { start, end, search } = req.query;
+  const { start = 1, end = 10, search } = req.query;
+
   let filter = {};
+
   if (search) {
     filter = {
-      $or: [
-        {
-          name: new RegExp(search),
-        },
-      ],
+      name: new RegExp(search, "i"),
     };
   }
+
   try {
-    // const categories = await CategoryModel.find(filter)
-    //   .skip(start - 1 ?? 0)
-    //   .limit(end ?? 10)
-    //   .exec();
-    const categories = await CategoryModel.find().populate(
-      "products.product",
-      "_id title price discount img"
-    );
-    res
-      .status(200)
-      .json({ message: "Get all categories successfully", data: categories });
+    const categories = await CategoryModel.find(filter)
+      .select("_id name status")
+      .skip(start - 1)
+      .limit(Number(end))
+      .lean();
+
+    const result = categories.map((c) => ({
+      id: c._id,
+      name: c.name,
+      status: c.status,
+    }));
+
+    res.status(200).json({
+      message: "Get all categories successfully",
+      data: result,
+    });
   } catch (err) {
     res.status(500).json(err);
   }
 };
 
 const getCategoriesById = async (req, res) => {
-  const { id } = req.params;
   try {
-    const product = await CategoryModel.findById(id).populate(
-      "products.product",
-      "_id title price discount img"
-    );
-    res.status(200).json({
-      message: "Get information categories successfully",
-      data: product,
+    const { id } = req.params;
+
+    if (!mongoose.Types.ObjectId.isValid(id)) {
+      return res.status(400).json({ message: "Invalid category id" });
+    }
+
+    const category = await CategoryModel.findById(id)
+      .populate("products", "_id title price discount img desc")
+      .lean();
+
+    if (!category) {
+      return res.status(404).json({ message: "Category not found" });
+    }
+
+    const result = {
+      ...category,
+      id: category._id,
+      products: category.products.map((p) => ({
+        ...p,
+        id: p._id,
+        _id: undefined,
+      })),
+    };
+
+    delete result._id;
+
+    res.json({
+      message: "Get category successfully",
+      data: result,
     });
   } catch (error) {
-    res.status(404).json(error);
+    res.status(500).json({ message: error.message });
   }
 };
 
@@ -62,7 +88,7 @@ const addNewCategory = async (req, res) => {
 
     if (existingCategory) {
       const productIds = new Set(
-        existingCategory.products.map((p) => p.product.toString())
+        existingCategory.products.map((p) => p.product.toString()),
       );
 
       productList.forEach((p) => {
@@ -96,15 +122,19 @@ const addNewCategory = async (req, res) => {
 };
 
 const updateCategory = async (req, res) => {
-  const id = req.params.id;
   try {
-    await CategoryModel.findOneAndUpdate(
-      { _id: id },
-      { $set: req.body }
-    ).exec();
-    res.status(200).json({ message: "Update category successfully" });
+    const category = await CategoryModel.findByIdAndUpdate(
+      req.params.id,
+      req.body,
+      { new: true },
+    );
+
+    res.json({
+      message: "Update category successfully",
+      category,
+    });
   } catch (error) {
-    res.status(400).json(error);
+    res.status(400).json({ message: error.message });
   }
 };
 
@@ -115,7 +145,7 @@ const deleteCategoryDetail = async (req, res) => {
     const updatedCategory = await CategoryModel.findByIdAndUpdate(
       categoryId,
       { $pull: { products: { product: { _id: productId } } } },
-      { new: true }
+      { new: true },
     );
 
     if (!updatedCategory) {

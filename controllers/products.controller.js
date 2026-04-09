@@ -1,63 +1,68 @@
 const ProductModel = require("../model/product.model");
+const ReviewModel = require("../model/review.model");
 const mongoose = require("mongoose");
 const bucket = require("../config/firebase");
 const fs = require("fs");
 
 const getAllProducts = async (req, res) => {
-  const { start, end, search, category } = req.query;
-  let filter = {};
-  if (search) {
-    filter = {
-      $or: [
-        {
-          title: new RegExp(search),
-        },
-      ],
-    };
-  }
-  if (category) {
-    if (Object.keys(filter).length !== 0) {
-      const newOption = filter.$or;
-      newOption.push({ "category[0].name": category });
-      filter = { $or: newOption };
-    } else {
-      filter = {
-        $or: [
-          {
-            "category.0.name": category,
-          },
-        ],
-      };
-    }
-  }
+  const { limit = 4, offset = 0, search, category } = req.query;
+
   try {
-    const Products = await ProductModel.aggregate([
-      {
-        $lookup: {
-          from: "categorymodels",
-          localField: "category",
-          foreignField: "_id",
-          as: "category",
-        },
+    const pipeline = [];
+
+    pipeline.push({
+      $lookup: {
+        from: "categorymodels",
+        localField: "category",
+        foreignField: "_id",
+        as: "category",
       },
-      { $match: filter },
-      {
-        $facet: {
-          data:
-            start && end
-              ? [{ $skip: +start - 1 || 0 }, { $limit: +end || 10 }]
-              : [],
-          count: [{ $count: "total" }],
-        },
+    });
+
+    const match = {};
+
+    if (search) {
+      match.title = { $regex: search, $options: "i" };
+    }
+
+    if (category) {
+      match["category.name"] = category;
+    }
+
+    if (Object.keys(match).length) {
+      pipeline.push({ $match: match });
+    }
+
+    pipeline.push({
+      $project: {
+        id: { $toString: "$_id" },
+        title: 1,
+        price: 1,
+        desc: 1,
+        img: 1,
+        _id: 0,
       },
-    ]);
-    const response = {
-      data: Products[0]?.data || [],
-      total: Products[0]?.count[0]?.total || 0,
-    };
-    res.status(200).json(response);
+    });
+
+    pipeline.push({
+      $facet: {
+        data: [{ $skip: Number(offset) }, { $limit: Number(limit) }],
+        count: [{ $count: "total" }],
+      },
+    });
+
+    const result = await ProductModel.aggregate(pipeline);
+
+    const products = result[0]?.data || [];
+    const total = result[0]?.count[0]?.total || 0;
+
+    res.status(200).json({
+      data: products,
+      total,
+      hasMore: Number(offset) + products.length < total,
+    });
   } catch (err) {
-    res.status(400).json(err);
+    res.status(500).json(err);
   }
 };
 
@@ -104,15 +109,105 @@ const getTopRatedProducts = async (req, res) => {
 
 const getProductById = async (req, res) => {
   const { id } = req.params;
+
+  if (!mongoose.Types.ObjectId.isValid(id)) {
+    return res.status(400).json({
+      message: "Invalid product id",
+    });
+  }
+
   try {
-    const product = await ProductModel.findById(id).populate("category");
-    // product = { ...product, averageRating: product.averageRating };
-    res
-      .status(200)
-      .json({ message: "Get information product successfully", data: product });
+    const product = await ProductModel.findById(id)
+      .populate("category", "name")
+      .lean();
+
+    if (!product) {
+      return res.status(404).json({
+        message: "Product not found",
+      });
+    }
+
+    const reviewDocs = await ReviewModel.find({
+      "review.product": id,
+      "review.status": "show",
+    })
+      .populate("review.reviewer", "username img")
+      .lean();
+
+    const formattedReviews = reviewDocs.map((doc) => ({
+      id: doc._id.toString(),
+      userId: doc.review.reviewer?._id?.toString(),
+      username: doc.review.reviewer?.username || "Anonymous",
+      img:
+        doc.review.reviewer?.img ||
+        "https://storage.googleapis.com/cloud-image-food-app.firebasestorage.app/images/default_icon.jpg",
+      rating: doc.review.rating,
+      content: doc.review.content ?? "",
+    }));
+    const avg =
+      formattedReviews.length > 0
+        ? formattedReviews.reduce((sum, r) => sum + r.rating, 0) /
+          formattedReviews.length
+        : 0;
+
+    const formatted = {
+      id: product._id.toString(),
+      title: product.title,
+      price: product.price,
+      discount: product.discount ?? 0,
+      desc: product.desc,
+      img: product.img,
+      averageRating: Number(avg.toFixed(1)),
+      totalReviews: formattedReviews.length,
+      reviews: formattedReviews.slice(0, 5),
+    };
+
+    return res.status(200).json({
+      message: "Get product successfully",
+      data: formatted,
+    });
   } catch (error) {
-    console.log("error", error);
-    res.status(404).json(error);
+    console.log(error);
+    return res.status(500).json({
+      message: "Internal server error",
+    });
+  }
+};
+
+const searchProducts = async (req, res) => {
+  const { q } = req.query;
+
+  if (!q || q.trim() === "") {
+    return res.status(200).json({
+      message: "Empty query",
+      data: [],
+    });
+  }
+
+  try {
+    const products = await ProductModel.find({
+      title: { $regex: q, $options: "i" },
+    })
+      .limit(10)
+      .select("title img price")
+      .lean();
+
+    const formatted = products.map((p) => ({
+      id: p._id.toString(),
+      title: p.title,
+      img: p.img,
+      price: p.price,
+    }));
+
+    return res.status(200).json({
+      message: "Search success",
+      data: formatted,
+    });
+  } catch (error) {
+    console.log(error);
+    return res.status(500).json({
+      message: "Internal server error",
+    });
   }
 };
 
@@ -216,6 +311,7 @@ const deleteProduct = async (req, res) => {
 module.exports = {
   deleteProduct,
   getAllProducts,
+  searchProducts,
   getTopRatedProducts,
   getProductById,
   addNewProduct,
