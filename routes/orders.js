@@ -7,6 +7,8 @@ router
   .get(orderController.getOrders)
   .post(orderController.addNewOrder);
 
+router.route("/order-again").post(orderController.orderAgain);
+
 router
   .route("/:id")
   .put(orderController.updateOrder)

@@ -2,34 +2,6 @@ const mongoose = require("mongoose");
 const bcrypt = require("bcrypt");
 const Schema = mongoose.Schema;
 
-const transactionSchema = new Schema(
-  {
-    type: {
-      type: String,
-      enum: ["topup", "payment", "refund"],
-      required: true,
-    },
-    amount: {
-      type: Number,
-      required: true,
-    },
-    status: {
-      type: String,
-      enum: ["pending", "success", "failed"],
-      default: "pending",
-    },
-    description: {
-      type: String,
-      default: "",
-    },
-    orderId: {
-      type: mongoose.Schema.Types.ObjectId,
-      ref: "OrderModel",
-    },
-  },
-  { timestamps: true },
-);
-
 const walletSchema = new Schema(
   {
     userId: {
@@ -44,12 +16,10 @@ const walletSchema = new Schema(
       default: 0,
     },
 
-    walletPassword: {
+    pin: {
       type: String,
       required: true,
     },
-
-    transactions: [transactionSchema],
   },
   { timestamps: true },
 );
@@ -62,10 +32,10 @@ walletSchema.virtual("user", {
 });
 
 walletSchema.pre("save", async function (next) {
-  if (!this.isModified("walletPassword")) return next();
+  if (!this.isModified("pin")) return next();
 
   const salt = await bcrypt.genSalt(10);
-  this.walletPassword = await bcrypt.hash(this.walletPassword, salt);
+  this.pin = await bcrypt.hash(this.pin, salt);
 
   next();
 });

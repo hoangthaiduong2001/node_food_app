@@ -1,62 +1,107 @@
 const NotificationModel = require("../model/notification.model");
 
-const getAllNotification = async (req, res) => {
-  const start = req.query.start ?? 1;
-  const end = req.query.count ?? 10;
-  req.session.isAuth = true;
+const getNotifications = async (req, res) => {
   try {
-    const notification = await NotificationModel.find()
+    const userId = req.user.id;
+    const { page = 1, limit = 10 } = req.query;
+
+    const notifications = await NotificationModel.find({ userId })
       .sort({ createdAt: -1 })
-      .skip(parseInt(start) - 1)
-      .limit(parseInt(end))
-      .exec();
-    res.status(200).json({ data: notification });
-  } catch (error) {
-    console.log("error", error);
-    res.status(400).json(error);
-  }
-};
+      .skip((page - 1) * limit)
+      .limit(Number(limit));
 
-const updateNotificationById = async (req, res) => {
-  const id = req.params.id;
+    const total = await NotificationModel.countDocuments({ userId });
 
-  try {
-    const updatedNotification = await NotificationModel.findByIdAndUpdate(
-      id,
-      { status: "read" },
-      { new: true }
-    ).exec();
-
-    if (!updatedNotification) {
-      return res.status(404).json({ message: "Notification not found" });
-    }
-
-    res.status(200).json({
-      message: "Notification marked as read",
+    return res.status(200).json({
+      message: "Get notifications successfully",
+      data: notifications,
+      pagination: {
+        page: Number(page),
+        limit: Number(limit),
+        total,
+      },
     });
   } catch (error) {
-    res.status(400).json({ message: "Failed to update notification", error });
+    console.error("Get notifications error:", error);
+    return res.status(500).json({
+      message: "Server error",
+    });
   }
 };
 
-const markAllNotificationsAsRead = async (req, res) => {
+const getUnreadCount = async (req, res) => {
   try {
-    const result = await NotificationModel.updateMany(
-      { status: "unread" },
-      { $set: { status: "read" } }
+    const userId = req.user.id;
+
+    const count = await NotificationModel.countDocuments({
+      userId,
+      isRead: false,
+    });
+
+    return res.status(200).json({
+      message: "Get unread count successfully",
+      data: count,
+    });
+  } catch (error) {
+    console.error("Unread count error:", error);
+    return res.status(500).json({
+      message: "Server error",
+    });
+  }
+};
+
+const markAsRead = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const userId = req.user.id;
+
+    const notification = await NotificationModel.findOneAndUpdate(
+      { _id: id, userId },
+      { isRead: true },
+      { new: true },
     );
 
-    res.status(200).json({
-      message: "All unread notifications marked as read",
-      modifiedCount: result.modifiedCount,
+    if (!notification) {
+      return res.status(404).json({
+        message: "Notification not found",
+      });
+    }
+
+    return res.status(200).json({
+      message: "Marked as read",
+      data: notification,
     });
   } catch (error) {
-    res.status(400).json({ message: "Failed to update notifications", error });
+    console.error("Mark as read error:", error);
+    return res.status(500).json({
+      message: "Server error",
+    });
+  }
+};
+
+const markAllAsRead = async (req, res) => {
+  try {
+    const userId = req.user.id;
+
+    await NotificationModel.updateMany(
+      { userId, isRead: false },
+      { isRead: true },
+    );
+
+    return res.status(200).json({
+      message: "All notifications marked as read",
+    });
+  } catch (error) {
+    console.error("Mark all error:", error);
+    return res.status(500).json({
+      message: "Server error",
+    });
   }
 };
 
 module.exports = {
-  getAllNotification,
-  updateNotificationById,
-  markAllNotificationsAsRead,
+  getNotifications,
+  getUnreadCount,
+  markAsRead,
+  markAllAsRead,
 };

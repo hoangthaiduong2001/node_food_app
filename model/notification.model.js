@@ -3,18 +3,43 @@ const Schema = mongoose.Schema;
 
 const notificationSchema = new Schema(
   {
-    username: { type: String, required: true },
-    order: {
+    userId: {
       type: mongoose.Schema.Types.ObjectId,
-      ref: "OrderModel",
+      ref: "UserModel",
+      required: true,
+      index: true,
     },
-    status: {
+
+    title: {
       type: String,
-      enum: ["unread", "read"],
-      default: "unread",
+      required: true,
+    },
+
+    message: {
+      type: String,
+      required: true,
+    },
+
+    type: {
+      type: String,
+      enum: ["order", "wallet", "promotion", "system"],
+      default: "system",
+    },
+
+    isRead: {
+      type: Boolean,
+      default: false,
+    },
+
+    data: {
+      orderId: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: "OrderModel",
+      },
+      amount: Number,
     },
   },
-  { timestamps: true }
+  { timestamps: true },
 );
 
 module.exports = mongoose.model("NotificationModel", notificationSchema);

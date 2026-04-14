@@ -1,13 +1,9 @@
-const notificationController = require("../controllers/notification.controller");
-
 const router = require("express").Router();
+const controller = require("../controllers/notification.controller");
 
-router.route("/").get(notificationController.getAllNotification);
-
-router.route("/:id").put(notificationController.updateNotificationById);
-//   .put(orderController.updateOrder)
-//   .delete(orderController.deleteOrder);
-
-router.route("/all").put(notificationController.markAllNotificationsAsRead);
+router.get("/", controller.getNotifications);
+router.get("/unread-count", controller.getUnreadCount);
+router.patch("/read-all", controller.markAllAsRead);
+router.patch("/:id/read", controller.markAsRead);
 
 module.exports = router;

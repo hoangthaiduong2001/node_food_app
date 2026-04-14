@@ -1,6 +1,10 @@
 const OrderModel = require("../model/order.model");
 const NotificationModel = require("../model/notification.model");
 const UserModel = require("../model/user.model");
+const CartModel = require("../model/cart.model");
+const WalletModel = require("../model/wallet.model");
+const TransactionModel = require("../model/transaction.model");
+const createNotification = require("../utils/notification");
 
 const addNewOrder = async (req, res) => {
   try {
@@ -35,21 +39,34 @@ const addNewOrder = async (req, res) => {
       paymentMethod,
       description,
       shippingFee,
+      status: "waiting",
+      payment: paymentMethod === "cod" ? "unpaid" : "paid",
     });
 
     const newOrder = await order.save();
 
     const notification = await NotificationModel.create({
-      username: user.username,
-      order: newOrder._id,
-      status: "unread",
+      userId,
+      title: "Order placed successfully",
+      message: `Your order #${newOrder._id} has been created`,
+      type: "order",
+      data: {
+        orderId: newOrder._id,
+      },
     });
 
     const io = req.app.get("io");
-    io.emit("newOrder", notification);
+
+    io.to(userId.toString()).emit("notification", notification);
+
+    io.emit("admin:newOrder", {
+      orderId: newOrder._id,
+      userId,
+    });
 
     return res.status(201).json({
       message: "Added a new Order successfully!",
+      orderId: newOrder._id,
     });
   } catch (error) {
     console.error("Add order error:", error);
@@ -63,7 +80,6 @@ const addNewOrder = async (req, res) => {
 const getOrderByUserId = async (req, res) => {
   const userId = req.params.userId;
   const { status } = req.query;
-  console.log(status);
   try {
     const query = { userId };
 
@@ -273,6 +289,49 @@ const updateOrderStatus = async (req, res) => {
       });
     }
 
+    const io = req.app.get("io");
+
+    if (
+      deliveryStatus === "cancelled" &&
+      order.paymentMethod === "wallet" &&
+      order.payment === "paid"
+    ) {
+      const wallet = await WalletModel.findOne({ userId: order.userId });
+
+      if (!wallet) {
+        return res.status(404).json({
+          message: "Wallet not found",
+        });
+      }
+
+      const refundAmount = Number(order.total);
+
+      wallet.balance += refundAmount;
+      await wallet.save();
+
+      await TransactionModel.create({
+        userId: order.userId,
+        walletId: wallet._id,
+        type: "refund",
+        amount: refundAmount,
+        status: "success",
+        description: `Refund order ${order._id}`,
+        orderId: order._id,
+      });
+
+      await createNotification({
+        userId: order.userId,
+        title: "Refund successful",
+        message: `You have been refunded ${refundAmount.toLocaleString()}đ`,
+        type: "wallet",
+        data: {
+          orderId: order._id,
+          amount: refundAmount,
+        },
+        io,
+      });
+    }
+
     order.status = deliveryStatus;
 
     if (deliveryStatus === "received" && order.paymentMethod === "cod") {
@@ -281,11 +340,52 @@ const updateOrderStatus = async (req, res) => {
 
     await order.save();
 
+    await createNotification({
+      userId: order.userId,
+      title:
+        deliveryStatus === "received" ? "Order delivered" : "Order cancelled",
+      message:
+        deliveryStatus === "received"
+          ? `Your order ${order._id} has been delivered`
+          : `Your order ${order._id} has been cancelled`,
+      type: "order",
+      data: {
+        orderId: order._id,
+      },
+      io,
+    });
+
+    if (deliveryStatus === "received") {
+      const cart = await CartModel.findOne({ userId: order.userId });
+
+      if (cart) {
+        order.products.forEach((orderItem) => {
+          const cartItem = cart.products.find(
+            (item) =>
+              item.product.toString() === orderItem.productId.toString(),
+          );
+
+          if (cartItem) {
+            cartItem.quantity -= orderItem.quantity;
+
+            if (cartItem.quantity <= 0) {
+              cart.products = cart.products.filter(
+                (item) =>
+                  item.product.toString() !== orderItem.productId.toString(),
+              );
+            }
+          }
+        });
+
+        await cart.save();
+      }
+    }
+
     return res.status(200).json({
       message: "Update order status successfully",
     });
   } catch (error) {
-    console.error(error);
+    console.error("Update order error:", error);
     return res.status(500).json({
       message: "Server error",
     });
@@ -337,6 +437,72 @@ const paymentOrderCod = async (req, res) => {
   }
 };
 
+const orderAgain = async (req, res) => {
+  try {
+    const { userId, products } = req.body;
+
+    if (!userId || !Array.isArray(products) || products.length === 0) {
+      return res.status(400).json({
+        message: "Missing userId or products",
+      });
+    }
+
+    for (const item of products) {
+      if (!item.productId || item.quantity <= 0) {
+        return res.status(400).json({
+          message: "Invalid productId or quantity",
+        });
+      }
+    }
+
+    let cart = await CartModel.findOne({ user: userId });
+
+    if (cart) {
+      products.forEach((p) => {
+        const existingProduct = cart.products.find(
+          (item) => item.product.toString() === p.productId,
+        );
+
+        if (existingProduct) {
+          existingProduct.quantity += p.quantity;
+        } else {
+          cart.products.push({
+            product: p.productId,
+            quantity: p.quantity,
+          });
+        }
+      });
+
+      await cart.save();
+
+      return res.status(200).json({
+        message: "Cart updated successfully",
+        data: cart,
+      });
+    }
+
+    const newCart = new CartModel({
+      user: userId,
+      products: products.map((p) => ({
+        product: p.productId,
+        quantity: p.quantity,
+      })),
+    });
+
+    await newCart.save();
+
+    return res.status(201).json({
+      message: "New cart created successfully",
+      data: newCart,
+    });
+  } catch (error) {
+    console.error("Order again error:", error);
+    return res.status(500).json({
+      message: "Internal Server Error",
+    });
+  }
+};
+
 module.exports = {
   addNewOrder,
   getOrderByUserId,
@@ -346,4 +512,5 @@ module.exports = {
   updateOrder,
   updateOrderStatus,
   paymentOrderCod,
+  orderAgain,
 };

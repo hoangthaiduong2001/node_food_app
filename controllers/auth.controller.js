@@ -2,6 +2,7 @@ const { OAuth2Client } = require("google-auth-library");
 const jwt = require("jsonwebtoken");
 const UserModel = require("../model/user.model");
 const nodemailer = require("nodemailer");
+const WalletModel = require("../model/wallet.model");
 const bcrypt = require("bcrypt");
 
 const {
@@ -10,7 +11,6 @@ const {
   capitalizeChar,
 } = require("../utils/jwt");
 const TokenModel = require("../model/token.model");
-const checkToken = require("../middleware/checkRefreshToken");
 
 const client = new OAuth2Client(process.env.GOOGLE_CLIENT_ID);
 
@@ -51,6 +51,8 @@ const googleLogin = async (req, res) => {
       });
     }
 
+    const wallet = await WalletModel.findOne({ userId: user._id });
+
     const accessToken = generateAccessToken(user);
     const refreshToken = generateRefreshToken(user);
 
@@ -74,6 +76,7 @@ const googleLogin = async (req, res) => {
         email: user.email,
         img: user.img,
         role: user.role,
+        hasWallet: !!wallet,
       },
     });
   } catch (error) {
@@ -177,6 +180,8 @@ const login = async (req, res) => {
       });
     }
 
+    const wallet = await WalletModel.findOne({ userId: user._id });
+
     const accessToken = generateAccessToken(user);
     const refreshToken = generateRefreshToken(user);
 
@@ -199,6 +204,7 @@ const login = async (req, res) => {
         username: user.username,
         email: user.email,
         role: user.role,
+        hasWallet: !!wallet,
       },
     });
   } catch (error) {
